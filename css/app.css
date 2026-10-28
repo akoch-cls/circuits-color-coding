@@ -160,3 +160,4 @@ fieldset.plain:disabled { opacity: 0.45; }
 .picker-dir svg { width: 30px; height: 22px; }
 .picker-remove { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 6px; cursor: pointer; color: var(--bad); font-size: 0.85rem; }
 .stage { -webkit-tap-highlight-color: transparent; }
+.speed-end { font-size: 0.75rem; color: var(--muted); }
