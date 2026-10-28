@@ -90,3 +90,42 @@ test('summary wording', () => {
   assert.equal(problemStatus(p, st({})), 'Not checked');
   assert.equal(problemStatus({ ...p, type: 'explore' }, st({ viewed: true })), 'Viewed');
 });
+
+test('accented titles make clean slugs', async () => {
+  assert.equal(slugify('Résumé café'), 'resume-cafe');
+});
+
+test('oversized or out-of-range circuits are rejected with a readable error', () => {
+  const huge = { p: [], w: Array.from({ length: 500 }, (_, i) => [i, 0, i + 1, 0]) };
+  assert.throws(() => validateSet({ problems: [{ circuit: huge }] }), /Problem 1 has a broken circuit \(Circuit is too big\)/);
+  assert.throws(() => validateSet({ problems: [{ circuit: { p: [['R', 0, 0, 1e300, 0]], w: [] } }] }), /Bad coordinate/);
+  assert.throws(() => deserialize({ p: [5], w: [] }), /Bad part/);
+});
+
+test('damaged saved marks and drafts are dropped instead of breaking the page', async () => {
+  const { normalizeDraft } = await import('../js/sets.js');
+  const c = deserialize(preset('5A'));
+  const g = buildGraph(c, 2);
+  assert.equal(unpackMarks({ arrows: [{}] }, c, g), null);
+  assert.equal(unpackMarks({ colors: 5 }, c, g), null);
+  const cleaned = unpackMarks({
+    colors: [[0, 8], [99, 4], [1, 42]],
+    arrows: [{ site: { kind: 'branch', b: 500 }, seg: 0, t: 0.5, n: 1, dir: 1 }, { site: { kind: 'part', part: 7 }, n: 1, dir: 1 }],
+    rays: [[0, 3], [9, 2]],
+  }, c, g);
+  assert.deepEqual([...cleaned.colors], [[0, 8]]);
+  assert.equal(cleaned.arrows.length, 0);
+  assert.equal(cleaned.rays.size, 1);
+  const d = normalizeDraft({ title: 5, problems: [null, { circuit: 'x' }, { circuit: preset('5A'), require: 'all' }] }, { ratio: 3 });
+  assert.equal(d.title, '');
+  assert.equal(d.problems.length, 1);
+  assert.deepEqual(d.problems[0].require, { colors: true, arrows: true, rays: true });
+  assert.equal(d.settings.ratio, 3);
+  assert.deepEqual(normalizeDraft('junk', {}).problems, []);
+});
+
+test('an opened set keeps its own grading settings', async () => {
+  const { normalizeDraft } = await import('../js/sets.js');
+  const set = validateSet({ settings: { ratio: 3, arrowPlacement: 'bulbs' }, problems: [{ circuit: preset('5A') }] });
+  assert.deepEqual(normalizeDraft(set, { ratio: 2, arrowPlacement: 'junctions' }).settings, { ratio: 3, arrowPlacement: 'bulbs' });
+});

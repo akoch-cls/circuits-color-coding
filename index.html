@@ -166,14 +166,16 @@
             <label class="check"><input type="checkbox" id="reqColors"> Wire colors</label>
             <label class="check"><input type="checkbox" id="reqArrows"> Arrows</label>
             <label class="check"><input type="checkbox" id="reqRays"> Bulb rays</label>
-            <label class="check"><input type="checkbox" id="probSettle"> Allow “Let it settle”</label>
+            <label class="check"><input type="checkbox" id="probSettle"> Allow “Let it settle” after they check</label>
             <label class="check"><input type="checkbox" id="probAnswer"> Show the Answer after they check</label>
           </fieldset>
+          <p id="probWarning" class="warning" hidden>This circuit has no steady flow (no battery, or a short circuit), so students can't complete it.</p>
           <button id="probReplace" class="wide subtle">Replace with the circuit on screen</button>
         </div>
 
         <h3>Preview &amp; publish</h3>
         <p id="setSettingsNote" class="hint"></p>
+        <button id="useMySettings" class="wide subtle" hidden>Use my current settings instead</button>
         <button id="previewSetBtn" class="wide primary">Preview as a student</button>
         <div class="btn-row">
           <button id="downloadSetBtn">Download set file</button>

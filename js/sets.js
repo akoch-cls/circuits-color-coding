@@ -27,7 +27,7 @@ const MAX_TEXT = 1000;
 const MAX_PROBLEMS = 60;
 
 export function slugify(title) {
-  const slug = String(title || '').toLowerCase().normalize('NFKD')
+  const slug = String(title || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
   return slug || 'my-set';
 }
@@ -43,11 +43,59 @@ export function newProblem(circuit) {
   };
 }
 
-export function newSet() {
-  return { version: 1, title: '', description: '', settings: { ratio: 2, arrowPlacement: 'junctions' }, problems: [] };
+export function newSet(settings = {}) {
+  return { version: 1, title: '', description: '', settings: normalizeSettings(settings), problems: [] };
 }
 
 const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+
+export function normalizeSettings(settings) {
+  const s = settings && typeof settings === 'object' ? settings : {};
+  const ratio = Number(s.ratio);
+  const placement = s.arrowPlacement;
+  return {
+    ratio: RATIOS.includes(ratio) ? ratio : 2,
+    arrowPlacement: typeof placement === 'string' && Object.hasOwn(PLACEMENTS, placement) ? placement : 'junctions',
+  };
+}
+
+// One problem with defaults filled in. Throws if its circuit is broken.
+export function normalizeProblem(p) {
+  if (!p || typeof p !== 'object') throw new Error('is empty');
+  let circuit;
+  try {
+    circuit = serialize(deserialize(p.circuit));
+  } catch (err) {
+    throw new Error(`has a broken circuit (${err.message})`);
+  }
+  const r = p.require && typeof p.require === 'object' ? p.require : {};
+  const require = { colors: r.colors !== false, arrows: r.arrows !== false, rays: r.rays !== false };
+  if (!require.colors && !require.arrows && !require.rays) Object.assign(require, { colors: true, arrows: true, rays: true });
+  return {
+    type: p.type === 'explore' ? 'explore' : 'predict',
+    instructions: text(p.instructions, MAX_TEXT),
+    circuit,
+    require,
+    allowSettle: p.allowSettle !== false,
+    allowAnswer: p.allowAnswer === true,
+  };
+}
+
+// A draft saved in this browser: keep whatever still makes sense, never throw.
+export function normalizeDraft(data, fallbackSettings) {
+  const d = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  const problems = [];
+  for (const p of Array.isArray(d.problems) ? d.problems.slice(0, MAX_PROBLEMS) : []) {
+    try { problems.push(normalizeProblem(p)); } catch { /* drop it */ }
+  }
+  return {
+    version: 1,
+    title: text(d.title, MAX_TITLE),
+    description: text(d.description, MAX_TEXT),
+    settings: normalizeSettings(d.settings || fallbackSettings),
+    problems,
+  };
+}
 
 // Check a set file and fill in defaults. Throws an Error with a readable message.
 export function validateSet(data) {
@@ -55,36 +103,17 @@ export function validateSet(data) {
   if (!Array.isArray(data.problems)) throw new Error('The set has no list of problems.');
   if (data.problems.length === 0) throw new Error('The set has no problems yet.');
   if (data.problems.length > MAX_PROBLEMS) throw new Error(`A set can have at most ${MAX_PROBLEMS} problems.`);
-  const settings = data.settings || {};
-  const ratio = Number(settings.ratio);
-  const placement = settings.arrowPlacement;
   return {
     version: 1,
     title: text(data.title, MAX_TITLE) || 'Problem set',
     description: text(data.description, MAX_TEXT),
-    settings: {
-      ratio: RATIOS.includes(ratio) ? ratio : 2,
-      arrowPlacement: typeof placement === 'string' && Object.hasOwn(PLACEMENTS, placement) ? placement : 'junctions',
-    },
+    settings: normalizeSettings(data.settings),
     problems: data.problems.map((p, i) => {
-      if (!p || typeof p !== 'object') throw new Error(`Problem ${i + 1} is empty.`);
-      let circuit;
       try {
-        circuit = serialize(deserialize(p.circuit));
+        return normalizeProblem(p);
       } catch (err) {
-        throw new Error(`Problem ${i + 1} has a broken circuit (${err.message}).`);
+        throw new Error(`Problem ${i + 1} ${err.message}.`);
       }
-      const r = p.require || {};
-      const require = { colors: r.colors !== false, arrows: r.arrows !== false, rays: r.rays !== false };
-      if (!require.colors && !require.arrows && !require.rays) Object.assign(require, { colors: true, arrows: true, rays: true });
-      return {
-        type: p.type === 'explore' ? 'explore' : 'predict',
-        instructions: text(p.instructions, MAX_TEXT),
-        circuit,
-        require,
-        allowSettle: p.allowSettle !== false,
-        allowAnswer: p.allowAnswer === true,
-      };
     }),
   };
 }
@@ -140,14 +169,32 @@ export function packMarks(pred, circuit) {
   };
 }
 
-export function unpackMarks(packed, circuit) {
-  const idAt = (i) => circuit.parts[i]?.id;
+// Returns null if the saved marks are damaged (they are then simply dropped).
+export function unpackMarks(packed, circuit, graph) {
+  try {
+    return unpackMarksUnsafe(packed, circuit, graph);
+  } catch {
+    return null;
+  }
+}
+
+// `graph` (optional) is the circuit's built graph, used to drop marks on wires
+// that do not exist.
+function unpackMarksUnsafe(packed, circuit, graph) {
+  const idAt = (i) => (Number.isInteger(i) ? circuit.parts[i]?.id : undefined);
+  const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+  const branches = graph ? graph.branches.length : Infinity;
+  const arrowOk = (a) => a && a.site && isInt(a.n, 1, 99) && (a.dir === 1 || a.dir === -1)
+    && (a.site.kind === 'part'
+      ? idAt(a.site.part) !== undefined
+      : a.site.kind === 'branch' && isInt(a.site.b, 0, branches - 1) && Number.isFinite(a.t)
+        && (!graph || graph.branches[a.site.b].segs.some((x) => x.seg === a.seg)));
   return {
-    colors: new Map(packed.colors || []),
-    arrows: (packed.arrows || [])
-      .map((a) => (a.site.kind === 'part' ? { ...a, site: { kind: 'part', id: idAt(a.site.part) } } : { ...a, site: { ...a.site } }))
-      .filter((a) => a.site.kind !== 'part' || a.site.id),
-    rays: new Map((packed.rays || []).filter(([i]) => idAt(i)).map(([i, n]) => [idAt(i), n])),
+    colors: new Map(packed.colors.filter(([b, level]) => isInt(b, 0, branches - 1) && isInt(level, 0, 8))),
+    arrows: packed.arrows.filter(arrowOk).map((a) => (a.site.kind === 'part'
+      ? { n: a.n, dir: a.dir, site: { kind: 'part', id: idAt(a.site.part) } }
+      : { n: a.n, dir: a.dir, seg: a.seg, t: a.t, site: { kind: 'branch', b: a.site.b } })),
+    rays: new Map(packed.rays.filter(([i, n]) => idAt(i) !== undefined && isInt(n, 0, 10)).map(([i, n]) => [idAt(i), n])),
   };
 }
 

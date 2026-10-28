@@ -43,7 +43,10 @@ export function startPlayer(app, set, { slug = null, onExit = null } = {}) {
   const progress = key ? restoreProgress(app.store.get(key, null), set) : emptyProgress(set);
   const save = () => { if (key) app.store.set(key, progress); };
   let current = -1;
+  let dirty = true; // marks changed since the last counted check
 
+  // what to put back when a teacher preview ends
+  const before = { locked: app.locked, linkSettings: app.linkSettings, settings: { ...app.settings } };
   app.locked = true;
   app.linkSettings = true;
   Object.assign(app.settings, set.settings);
@@ -59,15 +62,21 @@ export function startPlayer(app, set, { slug = null, onExit = null } = {}) {
     save();
   }
 
-  app.onMarkupChange = storeMarks;
+  app.onMarkupChange = () => {
+    dirty = true;
+    storeMarks();
+  };
   app.onCheck = (result) => {
     if (current < 0 || current >= N) return;
     const st = progress.problems[current];
+    const wasChecked = app.problem.checked;
+    app.problem.checked = true;
+    if (!wasChecked) app.applySettingsUI(); // unlocks settle / answer
+    if (!dirty && st.checks > 0) return; // pressing Check again without changes doesn't count
+    dirty = false;
     st.checks += 1;
     if (st.checks === 1) st.firstCorrect = result.allGood;
     if (result.allGood && !st.checksToCorrect) st.checksToCorrect = st.checks;
-    app.problem.checked = true;
-    app.applySettingsUI();
     storeMarks();
     renderDots();
   };
@@ -122,7 +131,9 @@ export function startPlayer(app, set, { slug = null, onExit = null } = {}) {
       $('#slideInstructions').hidden = !prob.instructions;
       app.problem = { ...prob, checked: st.checks > 0 };
       app.loadCircuit(deserialize(prob.circuit), null);
-      if (prob.type === 'predict' && st.marks) Object.assign(app.pred, unpackMarks(st.marks, app.circuit));
+      dirty = true;
+      const marks = prob.type === 'predict' && st.marks ? unpackMarks(st.marks, app.circuit, app.graph) : null;
+      if (marks) Object.assign(app.pred, marks);
       st.viewed = true;
       app.setMode(prob.type === 'explore' ? 'explore' : 'predict');
       app.applySettingsUI();
@@ -174,7 +185,10 @@ export function startPlayer(app, set, { slug = null, onExit = null } = {}) {
     $('#slideBar').hidden = true;
     $('#summary').hidden = true;
     document.querySelector('.layout').hidden = false;
-    app.restoreTeacherSettings();
+    app.locked = before.locked;
+    app.linkSettings = before.linkSettings;
+    app.settings = before.settings;
+    app.applySettingsUI();
     onExit();
   };
 

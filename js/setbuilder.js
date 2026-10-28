@@ -3,23 +3,33 @@
 
 import { deserialize, serialize } from './model.js';
 import { PLACEMENTS } from './arrows.js';
-import { newSet, newProblem, validateSet, serializeSet, slugify } from './sets.js';
+import { buildGraph } from './solver.js';
+import {
+  newSet, newProblem, validateSet, serializeSet, slugify, normalizeDraft, normalizeSettings,
+} from './sets.js';
 import { startPlayer, fetchSet } from './player.js';
 
 const $ = (sel) => document.querySelector(sel);
 const DRAFT_KEY = 'ccsim.setDraft';
 
 export function createSetBuilder(app) {
-  let draft = app.store.get(DRAFT_KEY, null) || newSet();
-  if (!Array.isArray(draft.problems)) draft = newSet();
+  const currentSettings = () => normalizeSettings(app.settings);
+  // a draft saved in this browser may be old or damaged; keep what still works
+  let draft = normalizeDraft(app.store.get(DRAFT_KEY, null), currentSettings());
   let selected = draft.problems.length ? 0 : -1;
 
   const save = () => app.store.set(DRAFT_KEY, draft);
   const problem = () => draft.problems[selected];
 
-  // The set file uses the teacher's current settings for grading.
+  // Each set keeps its own grading settings (a new set starts from the teacher's).
   function finishedSet() {
-    return validateSet({ ...draft, settings: { ratio: app.settings.ratio, arrowPlacement: app.settings.arrowPlacement } });
+    return validateSet(draft);
+  }
+
+  // Returns false if the teacher chose to keep the current draft.
+  function okToReplace() {
+    return !draft.problems.length
+      || confirm('Replace the set you are working on? Download it first if you want to keep it.');
   }
 
   function studentLink(slug) {
@@ -60,6 +70,13 @@ export function createSetBuilder(app) {
     $('#probSettle').checked = p.allowSettle;
     $('#probAnswer').checked = p.allowAnswer;
     $('#predictOptions').disabled = p.type === 'explore';
+    let noFlow = false;
+    try {
+      noFlow = Boolean(buildGraph(deserialize(p.circuit), draft.settings.ratio).error);
+    } catch {
+      noFlow = true;
+    }
+    $('#probWarning').hidden = !noFlow;
     $('#probUp').disabled = selected === 0;
     $('#probDown').disabled = selected === draft.problems.length - 1;
   }
@@ -67,7 +84,10 @@ export function createSetBuilder(app) {
   function render() {
     $('#setTitleInput').value = draft.title;
     $('#setDescInput').value = draft.description;
-    $('#setSettingsNote').textContent = `Students are graded with your current settings: long bulb ${app.settings.ratio}× the round bulb, arrows at “${PLACEMENTS[app.settings.arrowPlacement].toLowerCase()}”.`;
+    const st = draft.settings;
+    const cur = currentSettings();
+    $('#setSettingsNote').textContent = `This set grades with: long bulb ${st.ratio}× the round bulb, arrows at “${PLACEMENTS[st.arrowPlacement].toLowerCase()}”.`;
+    $('#useMySettings').hidden = st.ratio === cur.ratio && st.arrowPlacement === cur.arrowPlacement;
     renderList();
     renderEditor();
   }
@@ -81,7 +101,7 @@ export function createSetBuilder(app) {
   }
 
   function replaceDraft(set) {
-    draft = set;
+    draft = normalizeDraft(set, currentSettings());
     selected = draft.problems.length ? 0 : -1;
     save();
     $('#publishSteps').hidden = true;
@@ -187,7 +207,12 @@ export function createSetBuilder(app) {
     $('#publishSteps').hidden = false;
   }));
   $('#copySetLink').addEventListener('click', () => app.copyText($('#publishLink').value, 'Student link copied.'));
-  $('#openSetBtn').addEventListener('click', () => $('#openSetFile').click());
+  $('#useMySettings').addEventListener('click', () => {
+    draft.settings = currentSettings();
+    save();
+    render();
+  });
+  $('#openSetBtn').addEventListener('click', () => { if (okToReplace()) $('#openSetFile').click(); });
   $('#openSetFile').addEventListener('change', async (ev) => {
     const file = ev.target.files[0];
     ev.target.value = '';
@@ -199,7 +224,13 @@ export function createSetBuilder(app) {
     }
   });
   $('#openSiteBtn').addEventListener('click', async () => {
-    const slug = slugify($('#openSlug').value.replace(/\.json$/i, ''));
+    const name = $('#openSlug').value.trim().replace(/\.json$/i, '');
+    if (!name) {
+      app.toast('Type the name of a set on the site (its file name without .json).');
+      return;
+    }
+    if (!okToReplace()) return;
+    const slug = slugify(name);
     try {
       replaceDraft(await fetchSet(slug));
       app.toast(`Opened “${draft.title}” for editing.`);
@@ -208,15 +239,15 @@ export function createSetBuilder(app) {
     }
   });
   $('#newSetBtn').addEventListener('click', () => {
-    if (draft.problems.length && !confirm('Start a new set? The current draft will be cleared (download it first if you want to keep it).')) return;
-    replaceDraft(newSet());
+    if (!okToReplace()) return;
+    replaceDraft(newSet(currentSettings()));
   });
 
   return {
-    // called when the Sets tab opens
+    // called when the Sets tab opens; leaves the circuit on screen alone so a
+    // circuit just built in Build can be added
     show() {
       render();
-      if (selected >= 0) select(selected);
     },
   };
 }

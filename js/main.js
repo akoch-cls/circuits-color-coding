@@ -305,7 +305,8 @@ function syncViewButtons() {
   $('#playback').hidden = marking || (app.mode === 'predict' && app.pred.view === 'answer');
 }
 
-function runCheck() {
+// byStudent: the student pressed Check (automatic re-checks are not counted).
+function runCheck({ byStudent = false } = {}) {
   if (!app.ss) {
     app.pred.check = null;
     renderFeedback([{ kind: 'info', text: 'This circuit has no steady flow to check against.' }]);
@@ -318,7 +319,7 @@ function runCheck() {
   });
   renderFeedback();
   app.redraw();
-  if (app.onCheck) app.onCheck(app.pred.check);
+  if (byStudent && app.onCheck) app.onCheck(app.pred.check);
 }
 
 function renderFeedback(extra) {
@@ -523,7 +524,8 @@ function syncProblemUI() {
   show('[data-ptool="tail+"], [data-ptool="tail-"], [data-ptool="flip"]', req.arrows);
   show('[data-ptool="ray+"], [data-ptool="ray-"]', req.rays);
   $('#arrowHint').hidden = !req.arrows;
-  const settle = !pr || pr.allowSettle;
+  // in a set, settling (which shows the steady state) unlocks after a first Check
+  const settle = !pr || (pr.allowSettle && pr.checked);
   show('#settleBtn, [data-view="sim"]', settle);
   const answer = pr ? pr.allowAnswer && pr.checked : !app.locked && app.settings.allowAnswer;
   $('#answerBtn').hidden = !answer;
@@ -536,16 +538,10 @@ function syncProblemUI() {
   }
   const marks = [req.colors && 'color each wire', req.arrows && 'add arrows with tails', req.rays && 'add rays to the bulbs'].filter(Boolean);
   const list = marks.length > 1 ? `${marks.slice(0, -1).join(', ')} and ${marks.at(-1)}` : marks[0];
-  $('#predictHint').textContent = `${list[0].toUpperCase()}${list.slice(1)}. Then check your work${settle ? ' or let the circuit settle from your colors' : ''}.`;
+  const after = pr && pr.allowSettle && !pr.checked ? ' After your first check you can also let the circuit settle from your colors.' : '';
+  $('#predictHint').textContent = `${list[0].toUpperCase()}${list.slice(1)}. Then check your work${settle ? ' or let the circuit settle from your colors' : ''}.${after}`;
   renderSwatches();
 }
-
-app.restoreTeacherSettings = function restoreTeacherSettings() {
-  app.locked = false;
-  app.linkSettings = false;
-  app.settings = { ...DEFAULT_SETTINGS, ...store.get('ccsim.settings', {}) };
-  applySettingsUI();
-};
 
 app.applySettingsUI = applySettingsUI;
 function applySettingsUI() {
@@ -676,7 +672,7 @@ function wireEvents() {
     }
     app.setView(b.dataset.view);
   }));
-  $('#checkBtn').addEventListener('click', () => { app.setView('mine'); runCheck(); });
+  $('#checkBtn').addEventListener('click', () => { app.setView('mine'); runCheck({ byStudent: true }); });
   $('#settleBtn').addEventListener('click', settleFromPrediction);
   $('#clearMarksBtn').addEventListener('click', () => {
     resetPrediction();
@@ -765,7 +761,6 @@ async function init() {
     }
     return;
   }
-  app.setBuilder = createSetBuilder(app);
   const params = new URLSearchParams(location.hash.slice(1));
   let circuit = null;
   if (params.get('c')) {
@@ -777,6 +772,7 @@ async function init() {
   if (ap !== null || params.has('r')) app.linkSettings = true;
   if (ap !== null && Object.hasOwn(PLACEMENTS, ap)) app.settings.arrowPlacement = ap;
   if ([1.5, 2, 3, 4].includes(ratio)) app.settings.ratio = ratio;
+  app.setBuilder = createSetBuilder(app); // a new set starts from the settings in effect
   if (circuit) {
     app.selection = 'link';
     fillCircuitSelect();
@@ -789,7 +785,8 @@ async function init() {
   applySettingsUI();
   setPredictTool('paint');
   setBuildTool('wire');
-  const mode = ['explore', 'predict', 'build', 'sets'].includes(params.get('m')) ? params.get('m') : 'explore';
+  const modes = app.locked ? ['explore', 'predict', 'build'] : ['explore', 'predict', 'build', 'sets'];
+  const mode = modes.includes(params.get('m')) ? params.get('m') : 'explore';
   if (app.locked) {
     $$('.modes [data-mode]').forEach((b) => { b.hidden = b.dataset.mode !== mode; });
     $('[data-mode="sets"]').hidden = true;
