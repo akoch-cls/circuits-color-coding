@@ -9,6 +9,8 @@ import { createEditor } from './editor.js';
 import { createMarkup } from './markup.js';
 import { checkPrediction } from './check.js';
 import { PLACEMENTS, liveSites, siteFlow, studentPose, circuitCenter, S } from './arrows.js';
+import { createSetBuilder } from './setbuilder.js';
+import { startPlayer, fetchSet, showSetError } from './player.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -25,7 +27,11 @@ const store = {
   },
 };
 
+const DEFAULT_SETTINGS = { ratio: 2, snap: true, approx: false, allowAnswer: true, arrowPlacement: 'junctions' };
+
 const app = {
+  store,
+  problem: null, // the current problem when working through a problem set
   circuit: emptyCircuit(),
   graph: null,
   target: null, // steady-state pressures
@@ -35,7 +41,7 @@ const app = {
   speed: 1,
   mode: 'explore',
   locked: false, // opened from a student link that hides answers/settings
-  settings: { ratio: 2, snap: true, approx: false, allowAnswer: true, arrowPlacement: 'junctions', ...store.get('ccsim.settings', {}) },
+  settings: { ...DEFAULT_SETTINGS, ...store.get('ccsim.settings', {}) },
   layers: { colors: true, arrows: true, rays: true, badges: true },
   pred: { colors: new Map(), arrows: [], rays: new Map(), tool: 'paint', swatch: 8, check: null, view: 'mine' },
   build: { tool: 'wire', hover: null, preview: null, selected: null, undo: [] },
@@ -243,7 +249,7 @@ function updateStatus() {
 
   if (app.mode === 'predict' && app.pred.view === 'mine') {
     status.textContent = 'Your prediction';
-    explain.textContent = 'Purple arrows and rays are yours. Use the tools to mark up the circuit.';
+    explain.textContent = 'Purple marks are yours. Use the tools to mark up the circuit.';
     return;
   }
   if (!app.target) {
@@ -305,9 +311,14 @@ function runCheck() {
     renderFeedback([{ kind: 'info', text: 'This circuit has no steady flow to check against.' }]);
     return;
   }
-  app.pred.check = checkPrediction(app.graph, app.ss, app.pred, { circuit: app.circuit, placement: app.settings.arrowPlacement });
+  app.pred.check = checkPrediction(app.graph, app.ss, app.pred, {
+    circuit: app.circuit,
+    placement: app.settings.arrowPlacement,
+    require: app.problem?.require,
+  });
   renderFeedback();
   app.redraw();
+  if (app.onCheck) app.onCheck(app.pred.check);
 }
 
 function renderFeedback(extra) {
@@ -324,6 +335,7 @@ function renderFeedback(extra) {
   }
 }
 app.renderFeedback = () => renderFeedback();
+app.runCheck = runCheck;
 
 function settleFromPrediction() {
   if (!app.target) return;
@@ -412,19 +424,21 @@ function circuitFor(value) {
   return deserialize(PRESET_GROUPS[gi].items[Number(idx)]);
 }
 
+app.loadCircuit = loadCircuit;
 function loadCircuit(circuit, selection) {
   app.circuit = circuit;
   app.selection = selection;
   app.build.undo = [];
   app.build.selected = null;
   $('#nameInput').value = circuit.name;
-  if (selection) $('#circuitSelect').value = selection;
+  $('#circuitSelect').value = selection || ''; // blank when the circuit isn't from the menu
   $('#deleteSavedBtn').disabled = !String(selection).startsWith('saved:');
   app.rebuild();
 }
 
 // ---------------------------------------------------------------- modes & controls
 
+app.setMode = setMode;
 function setMode(mode) {
   app.mode = mode;
   app.settleSource = null;
@@ -434,11 +448,12 @@ function setMode(mode) {
   app.build.hover = null;
   app.build.preview = null;
   syncViewButtons();
-  if (mode === 'build' || mode === 'explore') {
+  if (mode !== 'predict') {
     if (!app.running) app.V = app.target;
   }
   renderSwatches();
   app.redraw();
+  if (mode === 'sets' && app.setBuilder) app.setBuilder.show();
 }
 
 function updatePlayButton() {
@@ -457,7 +472,7 @@ function renderSwatches() {
     b.title = l.name;
     b.setAttribute('aria-label', l.name);
     b.style.background = l.solid || `repeating-linear-gradient(45deg, ${l.stripes[0]} 0 6px, ${l.stripes[1]} 6px 12px)`;
-    if (app.mode === 'predict') {
+    if (app.mode === 'predict' && (!app.problem || app.problem.require.colors)) {
       b.setAttribute('aria-pressed', String(app.pred.swatch === level && app.pred.tool === 'paint'));
       b.addEventListener('click', () => {
         app.pred.swatch = level;
@@ -475,7 +490,8 @@ function renderSwatches() {
 }
 
 function currentSwatchName() {
-  return app.mode === 'predict' ? `Painting: ${LEVELS[app.pred.swatch].name}` : 'Red (+ end of battery) down to blue (− end)';
+  const painting = app.mode === 'predict' && (!app.problem || app.problem.require.colors);
+  return painting ? `Painting: ${LEVELS[app.pred.swatch].name}` : 'Red (+ end of battery) down to blue (− end)';
 }
 
 function setPredictTool(tool) {
@@ -498,16 +514,49 @@ const ARROW_HINTS = {
   all: 'Arrows: put one beside each lit bulb and on every wire that has flow. Click a bulb or a spot on a wire with ➕ Tail.',
 };
 
+// In a problem set, show only the tools and buttons this problem allows.
+function syncProblemUI() {
+  const pr = app.problem;
+  const req = pr ? pr.require : { colors: true, arrows: true, rays: true };
+  const show = (sel, on) => $$(sel).forEach((el) => { el.hidden = !on; });
+  show('[data-ptool="paint"], [data-ptool="erase"]', req.colors);
+  show('[data-ptool="tail+"], [data-ptool="tail-"], [data-ptool="flip"]', req.arrows);
+  show('[data-ptool="ray+"], [data-ptool="ray-"]', req.rays);
+  $('#arrowHint').hidden = !req.arrows;
+  const settle = !pr || pr.allowSettle;
+  show('#settleBtn, [data-view="sim"]', settle);
+  const answer = pr ? pr.allowAnswer && pr.checked : !app.locked && app.settings.allowAnswer;
+  $('#answerBtn').hidden = !answer;
+  $('.view-toggle').hidden = !settle && !answer; // nothing to switch to
+  if ((app.pred.view === 'sim' && !settle) || (app.pred.view === 'answer' && !answer)) app.setView('mine');
+  const tool = $(`[data-ptool="${app.pred.tool}"]`);
+  if (tool && tool.hidden) {
+    const first = $$('[data-ptool]').find((b) => !b.hidden);
+    if (first) setPredictTool(first.dataset.ptool);
+  }
+  const marks = [req.colors && 'color each wire', req.arrows && 'add arrows with tails', req.rays && 'add rays to the bulbs'].filter(Boolean);
+  const list = marks.length > 1 ? `${marks.slice(0, -1).join(', ')} and ${marks.at(-1)}` : marks[0];
+  $('#predictHint').textContent = `${list[0].toUpperCase()}${list.slice(1)}. Then check your work${settle ? ' or let the circuit settle from your colors' : ''}.`;
+  renderSwatches();
+}
+
+app.restoreTeacherSettings = function restoreTeacherSettings() {
+  app.locked = false;
+  app.linkSettings = false;
+  app.settings = { ...DEFAULT_SETTINGS, ...store.get('ccsim.settings', {}) };
+  applySettingsUI();
+};
+
+app.applySettingsUI = applySettingsUI;
 function applySettingsUI() {
+  syncProblemUI();
   $('#arrowHint').textContent = ARROW_HINTS[app.settings.arrowPlacement];
   $('#arrowPlacement').value = app.settings.arrowPlacement;
   $('#ratioSelect').value = String(app.settings.ratio);
   $('#snapSetting').checked = app.settings.snap;
   $('#approxSetting').checked = app.settings.approx;
   $('#answerSetting').checked = app.settings.allowAnswer;
-  $('#answerBtn').hidden = app.locked || !app.settings.allowAnswer;
   $('#settingsBtn').hidden = app.locked;
-  if (app.pred.view === 'answer' && $('#answerBtn').hidden) app.setView('mine');
   const note = app.ss?.approx ? 'Note: the flows in this circuit do not divide into whole numbers of tails, so the arrow tails shown are rounded.' : '';
   $('#approxNote').textContent = note;
 }
@@ -525,6 +574,16 @@ function shareLink() {
   const grading = `&r=${app.settings.ratio}&ap=${app.settings.arrowPlacement}`;
   return `${location.origin}${location.pathname}#c=${encodeShare(c)}&m=${mode}${hide ? '&a=0' : ''}${grading}`;
 }
+
+app.download = download;
+app.copyText = async function copyText(text, done) {
+  try {
+    await navigator.clipboard.writeText(text);
+    app.toast(done);
+  } catch {
+    prompt('Copy this:', text);
+  }
+};
 
 function download(filename, text) {
   const a = document.createElement('a');
@@ -619,7 +678,11 @@ function wireEvents() {
   }));
   $('#checkBtn').addEventListener('click', () => { app.setView('mine'); runCheck(); });
   $('#settleBtn').addEventListener('click', settleFromPrediction);
-  $('#clearMarksBtn').addEventListener('click', () => { resetPrediction(); app.redraw(); });
+  $('#clearMarksBtn').addEventListener('click', () => {
+    resetPrediction();
+    app.redraw();
+    if (app.onMarkupChange) app.onMarkupChange();
+  });
 
   // build
   $$('[data-btool]').forEach((b) => b.addEventListener('click', () => setBuildTool(b.dataset.btool)));
@@ -669,15 +732,7 @@ function wireEvents() {
       app.toast(`That file is not a circuit (${err.message}).`);
     }
   });
-  $('#copyLinkBtn').addEventListener('click', async () => {
-    const link = shareLink();
-    try {
-      await navigator.clipboard.writeText(link);
-      app.toast('Student link copied. Paste it into your class page or assignment.');
-    } catch {
-      prompt('Copy this link:', link);
-    }
-  });
+  $('#copyLinkBtn').addEventListener('click', () => app.copyText(shareLink(), 'Student link copied. Paste it into your class page or assignment.'));
 
   // settings
   $('#settingsBtn').addEventListener('click', () => { applySettingsUI(); $('#settings').showModal(); });
@@ -697,8 +752,20 @@ function wireEvents() {
   });
 }
 
-function init() {
+async function init() {
   wireEvents();
+  const setSlug = new URLSearchParams(location.search).get('set');
+  if (setSlug !== null) {
+    setPredictTool('paint');
+    requestAnimationFrame(frame);
+    try {
+      startPlayer(app, await fetchSet(setSlug), { slug: setSlug });
+    } catch (err) {
+      showSetError(err.message);
+    }
+    return;
+  }
+  app.setBuilder = createSetBuilder(app);
   const params = new URLSearchParams(location.hash.slice(1));
   let circuit = null;
   if (params.get('c')) {
@@ -722,9 +789,10 @@ function init() {
   applySettingsUI();
   setPredictTool('paint');
   setBuildTool('wire');
-  const mode = ['explore', 'predict', 'build'].includes(params.get('m')) ? params.get('m') : 'explore';
+  const mode = ['explore', 'predict', 'build', 'sets'].includes(params.get('m')) ? params.get('m') : 'explore';
   if (app.locked) {
     $$('.modes [data-mode]').forEach((b) => { b.hidden = b.dataset.mode !== mode; });
+    $('[data-mode="sets"]').hidden = true;
     $('#arrowPlacement').closest('label').hidden = true;
   }
   setMode(mode);

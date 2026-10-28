@@ -5,8 +5,12 @@
 //   arrows: [{ site: {kind:'branch', b} | {kind:'part', id}, seg, t, n, dir }]
 //           dir +1 = branch.start -> branch.end, or part.a -> part.b
 //           (seg, t) = where on the wire a branch arrow was drawn
-// opts = { circuit, placement }   placement decides which places need an arrow
 //   rays:   Map(partId -> n)
+// }
+// opts = {
+//   circuit,
+//   placement,                      which places need an arrow
+//   require: { colors, arrows, rays }   marks this problem asks for (default: all)
 // }
 // Feedback is in words only: no pressures or currents are ever shown.
 
@@ -20,8 +24,17 @@ export function checkPrediction(g, ss, pred, opts = {}) {
     messages: [],
   };
   const say = (kind, text) => result.messages.push({ kind, text });
+  const req = { colors: true, arrows: true, rays: true, ...opts.require };
 
-  // --- wire colors ---
+  if (req.colors) checkColors(g, ss, pred, result, say);
+  if (req.arrows) checkArrows(g, ss, pred, opts, result, say);
+  if (req.rays) checkRays(ss, pred, result, say);
+
+  result.allGood = result.messages.every((m) => m.kind === 'good');
+  return result;
+}
+
+function checkColors(g, ss, pred, result, say) {
   let unpainted = 0;
   let wrongColor = 0;
   let floatingPainted = 0;
@@ -41,8 +54,10 @@ export function checkPrediction(g, ss, pred, opts = {}) {
   if (wrongColor) say('bad', `${plural(wrongColor, 'wire has', 'wires have')} the wrong pressure color (outlined in red). Remember: wires tied straight to the battery are red or blue, and pressure only changes across a bulb.`);
   if (floatingPainted) say('bad', 'Some colored wires are not part of a complete path to the battery, so they have no pressure difference to show. Leave them uncolored.');
   if (!unpainted && !wrongColor && !floatingPainted) say('good', 'All wire colors match the steady state.');
+}
 
-  // --- arrows: each one must match the flow where it was drawn ---
+// Each arrow must match the flow where it was drawn.
+function checkArrows(g, ss, pred, opts, result, say) {
   const arrows = pred.arrows || [];
   const truthOf = (site) => (site.kind === 'branch'
     ? { T: ss.branchTails[site.b], dir: ss.branchDir[site.b] }
@@ -155,8 +170,10 @@ export function checkPrediction(g, ss, pred, opts = {}) {
   if (!missingBulbs && !missingWires && !backwards && !extra && !wrongAmount && !alongWire && !junctionErrors && !bulbErrors) {
     say('good', arrows.length ? 'All arrows match the steady-state flow.' : 'No arrows are needed here.');
   }
+}
 
-  // --- brightness: rays must rank the bulbs correctly ---
+// Brightness: rays must rank the bulbs correctly.
+function checkRays(ss, pred, result, say) {
   const bulbs = ss.bulbs.map((b) => ({ id: b.part.id, P: b.P, n: pred.rays.get(b.part.id) || 0 }));
   let offWrong = 0; let rankWrong = 0;
   bulbs.forEach((b) => {
@@ -176,9 +193,6 @@ export function checkPrediction(g, ss, pred, opts = {}) {
   if (offWrong) say('bad', 'Check which bulbs are lit: a bulb glows only when there is a pressure difference across it.');
   if (rankWrong) say('bad', 'Some bulbs are ranked wrong: brighter bulbs need more rays, and equally bright bulbs need the same number.');
   if (!offWrong && !rankWrong) say('good', 'Bulb brightness ranking is correct.');
-
-  result.allGood = result.messages.every((m) => m.kind === 'good');
-  return result;
 }
 
 function plural(n, one, many) {
