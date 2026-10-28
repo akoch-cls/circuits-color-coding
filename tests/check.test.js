@@ -124,3 +124,16 @@ test('direction choices: left/up first, and each matches the arrow that gets dra
     }
   }
 });
+
+test('arrows show a partial last tail for in-between flows', async () => {
+  const { arrowTails, arrowGlyph } = await import('../js/render.js');
+  assert.deepEqual(arrowTails(2), [1, 1]);
+  assert.deepEqual(arrowTails(1.4).length, 2);
+  assert.ok(Math.abs(arrowTails(1.4)[1] - 0.4) < 1e-9);
+  assert.deepEqual(arrowTails(2.97), [1, 1, 1]);
+  assert.deepEqual(arrowTails(3.02), [1, 1, 1]);
+  assert.deepEqual(arrowTails(0.5), [0.5]);
+  assert.deepEqual(arrowTails(0), [1]);
+  assert.equal((arrowGlyph(3, '#000').match(/<line/g) || []).length, 3);
+  assert.match(arrowGlyph(1.5, '#000'), /stroke-opacity/);
+});

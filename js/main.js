@@ -130,16 +130,26 @@ function segPressure(V, s) {
   return (V[s.na] + V[s.nb]) / 2;
 }
 
+// While the circuit is changing, flows are usually between whole numbers of
+// tails, so arrows get a partial last tail and "more in than out" stays visible.
+// At steady state every arrow has whole tails.
 function liveArrows(V) {
   const g = app.graph;
   const an = analyze(g, V);
-  const unit = app.ss.unit;
-  const arrows = [];
-  for (const { site, pose } of liveSites(g, app.circuit, app.settings.arrowPlacement)) {
+  const changing = isChanging(V);
+  const flows = liveSites(g, app.circuit, app.settings.arrowPlacement).map(({ site, pose }) => {
     const I = siteFlow(g, an, site);
-    const r = Math.abs(I) / unit;
-    if (r < 0.3 || Math.abs(I) <= app.ss.zero) continue;
-    arrows.push({ pose, n: Math.min(MAX_TAILS, Math.max(1, Math.round(r))), dir: I >= 0 ? 1 : -1 });
+    return { pose, I, r: Math.abs(I) / app.ss.unit };
+  });
+  // early on flows can be far bigger than at steady state: shrink every arrow
+  // by the same amount so they still compare fairly
+  const biggest = Math.max(0, ...flows.map((x) => x.r));
+  const scale = biggest > MAX_TAILS ? MAX_TAILS / biggest : 1;
+  const arrows = [];
+  for (const { pose, I, r } of flows) {
+    const n = r * scale;
+    if (Math.abs(I) <= app.ss.zero || n < (changing ? 0.12 : 0.3)) continue;
+    arrows.push({ pose, n: changing ? n : Math.min(MAX_TAILS, Math.max(1, Math.round(n))), dir: I >= 0 ? 1 : -1 });
   }
   return arrows;
 }

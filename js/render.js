@@ -235,18 +235,37 @@ function arrowAt(a) {
 }
 
 // An arrow pointing along +x with `n` parallel tails feeding one head.
+// `n` may be fractional (a flow between whole numbers of tails): the leftover
+// is drawn as one shorter, fainter tail.
 export function arrowGlyph(n, color, bad) {
+  const tails = arrowTails(n);
   const gap = 4.2;
-  const spread = (n - 1) * gap;
+  const spread = (tails.length - 1) * gap;
   const h = Math.max(6, spread / 2 + 4);
   let s = '';
   if (bad) s += `<ellipse cx="0" cy="0" rx="25" ry="${f(h + 7)}" fill="none" stroke="${BAD}" stroke-width="2.5" stroke-dasharray="5 4"/>`;
-  for (let i = 0; i < n; i++) {
+  tails.forEach((part, i) => {
     const y = -spread / 2 + i * gap;
-    s += `<line x1="-15" y1="${f(y)}" x2="6" y2="${f(y * 0.55)}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
-  }
+    const tipY = y * 0.55;
+    // a partial tail keeps its tip at the head and starts part of the way back
+    const x1 = 6 - 21 * part;
+    const y1 = tipY + (y - tipY) * part;
+    const fade = part < 1 ? ` stroke-opacity="${f(0.35 + 0.65 * part)}"` : '';
+    s += `<line x1="${f(x1)}" y1="${f(y1)}" x2="6" y2="${f(tipY)}" stroke="${color}" stroke-width="2" stroke-linecap="round"${fade}/>`;
+  });
   s += `<polyline points="4,${f(-h)} 14,0 4,${f(h)}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
   return s;
+}
+
+// Length of each tail (1 = full) for a flow of `n` tails.
+export function arrowTails(n) {
+  let whole = Math.floor(n);
+  let part = n - whole;
+  if (part > 0.95) { whole += 1; part = 0; }
+  if (part < 0.05) part = 0;
+  const tails = Array(whole).fill(1);
+  if (part) tails.push(part);
+  return tails.length ? tails : [1];
 }
 
 function badge(g, b) {
