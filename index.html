@@ -18,9 +18,33 @@
       <button role="tab" data-mode="explore" aria-selected="true">Explore</button>
       <button role="tab" data-mode="predict">Predict</button>
       <button role="tab" data-mode="build">Build</button>
+      <button role="tab" data-mode="sets">Sets</button>
     </nav>
     <button id="settingsBtn" class="icon-btn" title="Teacher settings" aria-label="Teacher settings">⚙</button>
   </header>
+
+  <section id="slideBar" class="slidebar" hidden>
+    <div class="slide-top">
+      <h2 id="setTitle"></h2>
+      <span id="slideCount" class="slide-count"></span>
+      <button id="exitPreview" class="exit-preview" hidden>Exit preview</button>
+    </div>
+    <div id="slideNav" class="slide-nav">
+      <button id="prevSlide">← Previous</button>
+      <div id="slideDots" class="dots" aria-label="Problems"></div>
+      <button id="nextSlide" class="primary">Next →</button>
+    </div>
+    <p id="slideInstructions" class="slide-instructions"></p>
+  </section>
+
+  <section id="summary" class="summary" hidden>
+    <h2 id="sumTitle"></h2>
+    <p id="sumDate" class="sum-date"></p>
+    <label class="field sum-name">Name <input id="sumName" type="text" maxlength="80" autocomplete="name"></label>
+    <p id="sumScore" class="sum-score"></p>
+    <ol id="sumList" class="sum-list"></ol>
+    <button id="sumBack">← Back to the problems</button>
+  </section>
 
   <main class="layout">
     <section class="stage-wrap">
@@ -49,7 +73,7 @@
       <!-- PREDICT -->
       <div class="mode-panel" data-panel="predict" hidden>
         <h2>Your prediction</h2>
-        <p class="hint">Color each wire, add arrows with tails, and add rays to the bulbs. Then check your work or let the circuit settle from your colors.</p>
+        <p class="hint" id="predictHint">Color each wire, add arrows with tails, and add rays to the bulbs. Then check your work or let the circuit settle from your colors.</p>
         <div class="view-toggle" role="radiogroup" aria-label="View">
           <button data-view="mine" aria-pressed="true">My prediction</button>
           <button data-view="sim" aria-pressed="false">Simulation</button>
@@ -110,6 +134,68 @@
         </label>
         <label class="check"><input type="checkbox" id="linkHideAnswer" checked> Hide the Answer button and settings</label>
         <button id="copyLinkBtn" class="wide primary">Copy student link</button>
+      </div>
+
+      <!-- SETS (teacher) -->
+      <div class="mode-panel" data-panel="sets" hidden>
+        <h2>Problem set</h2>
+        <p class="hint">Students see one problem at a time, like a slideshow, then a summary. Pick a circuit from the menu at the top (or make one in Build), then add it.</p>
+        <label class="field">Title <input id="setTitleInput" type="text" maxlength="100" placeholder="e.g. Series vs parallel"></label>
+        <label class="field">Description (optional) <textarea id="setDescInput" rows="2" maxlength="1000"></textarea></label>
+        <h3>Problems</h3>
+        <ol id="problemList" class="problem-list"></ol>
+        <p id="problemListEmpty" class="hint">No problems yet.</p>
+        <button id="addProblemBtn" class="wide">+ Add the circuit on screen</button>
+
+        <div id="problemEditor" class="problem-editor" hidden>
+          <h3>Problem <span id="probNum"></span></h3>
+          <div class="btn-row">
+            <button id="probUp" title="Move earlier">↑ Earlier</button>
+            <button id="probDown" title="Move later">↓ Later</button>
+            <button id="probRemove">Remove</button>
+          </div>
+          <label class="field">Type
+            <select id="probType">
+              <option value="predict">Predict: students mark it up</option>
+              <option value="explore">Explore: watch it settle, nothing to mark</option>
+            </select>
+          </label>
+          <label class="field">Instructions for students <textarea id="probInstr" rows="3" maxlength="1000" placeholder="e.g. Color the wires, then rank the bulbs."></textarea></label>
+          <fieldset id="predictOptions" class="plain">
+            <span class="field-label">Students must mark</span>
+            <label class="check"><input type="checkbox" id="reqColors"> Wire colors</label>
+            <label class="check"><input type="checkbox" id="reqArrows"> Arrows</label>
+            <label class="check"><input type="checkbox" id="reqRays"> Bulb rays</label>
+            <label class="check"><input type="checkbox" id="probSettle"> Allow “Let it settle” after they check</label>
+            <label class="check"><input type="checkbox" id="probAnswer"> Show the Answer after they check</label>
+          </fieldset>
+          <p id="probWarning" class="warning" hidden>This circuit has no steady flow (no battery, or a short circuit), so students can't complete it.</p>
+          <button id="probReplace" class="wide subtle">Replace with the circuit on screen</button>
+        </div>
+
+        <h3>Preview &amp; publish</h3>
+        <p id="setSettingsNote" class="hint"></p>
+        <button id="useMySettings" class="wide subtle" hidden>Use my current settings instead</button>
+        <button id="previewSetBtn" class="wide primary">Preview as a student</button>
+        <div class="btn-row">
+          <button id="downloadSetBtn">Download set file</button>
+          <button id="openSetBtn">Open set file</button>
+          <input id="openSetFile" type="file" accept=".json,application/json" hidden>
+        </div>
+        <div id="publishSteps" class="publish" hidden>
+          <p><strong>Downloaded <code id="publishFile"></code>.</strong> To publish it:</p>
+          <ol>
+            <li>On GitHub, open your repository's <code>sets</code> folder.</li>
+            <li>Click <em>Add file → Upload files</em>, drop in the file, and click <em>Commit changes</em>.</li>
+            <li>After about a minute, give students this link:</li>
+          </ol>
+          <div class="btn-row"><input id="publishLink" type="text" readonly aria-label="Student link"><button id="copySetLink">Copy</button></div>
+        </div>
+        <div class="btn-row">
+          <input id="openSlug" type="text" placeholder="set name on the site" aria-label="Set name on the site">
+          <button id="openSiteBtn">Open from site</button>
+        </div>
+        <button id="newSetBtn" class="wide subtle">Start a new set</button>
       </div>
 
       <!-- shared -->

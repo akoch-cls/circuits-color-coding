@@ -89,22 +89,28 @@ export function serialize(circuit) {
   };
 }
 
+export const MAX_ELEMENTS = 400; // parts + wires
+export const MAX_COORD = 1000;
+
 export function deserialize(data) {
   if (!data || !Array.isArray(data.p) || !Array.isArray(data.w)) {
     throw new Error('Not a circuit file');
   }
+  if (data.p.length + data.w.length > MAX_ELEMENTS) throw new Error('Circuit is too big');
   const num = (v) => {
     const n = Number(v);
-    if (!Number.isInteger(n)) throw new Error('Bad coordinate');
+    if (!Number.isInteger(n) || Math.abs(n) > MAX_COORD) throw new Error('Bad coordinate');
     return n;
   };
   return {
-    name: String(data.n || 'Untitled circuit'),
-    parts: data.p.map(([type, ax, ay, bx, by]) => {
+    name: String(data.n || 'Untitled circuit').slice(0, 100),
+    parts: data.p.map((row) => {
+      if (!Array.isArray(row)) throw new Error('Bad part');
+      const [type, ax, ay, bx, by] = row;
       if (!['battery', 'R', 'L'].includes(type)) throw new Error(`Unknown part ${type}`);
       return { id: uid('p'), type, a: [num(ax), num(ay)], b: [num(bx), num(by)] };
     }),
-    wires: data.w.map(([ax, ay, bx, by]) => ({ id: uid('w'), a: [num(ax), num(ay)], b: [num(bx), num(by)] })),
+    wires: data.w.map((row) => (Array.isArray(row) ? row : [NaN])).map(([ax, ay, bx, by]) => ({ id: uid('w'), a: [num(ax), num(ay)], b: [num(bx), num(by)] })),
   };
 }
 

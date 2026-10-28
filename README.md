@@ -38,6 +38,25 @@ The same setting tells students where they need arrows (the Predict panel says s
 - **"Bulbs don't use up flow":** the arrow on a bulb must match the arrows on the wires either side of it.
 - **Brightness:** rays must *rank* the bulbs correctly (brighter means more rays, equal means the same number, unlit means none).
 
+## Problem sets (slideshow)
+
+The **Sets** tab lets you put several circuits in order for students to work through **one at a time**, like a slideshow. They finish on a summary screen.
+
+For each problem you choose:
+- **Type.** *Predict*: students mark it up. *Explore*: students watch it settle, with nothing to mark.
+- **Instructions** shown above the circuit.
+- **Which marks are required** (any of wire colors, arrows, rays). Students only see the tools for those marks, and Check only grades those.
+- Whether **Let it settle** and the **Answer** are allowed. Both unlock only after the student presses Check, so they commit to a prediction first. (Settling shows the steady state, so it reveals the answer too.)
+
+**Preview as a student** runs the set in place. When it's ready, click **Download set file**, then upload the file to the [`sets/`](sets/) folder on GitHub (*Add file → Upload files*). Students open it at `…/?set=<file-name>`, and the app shows you the exact link. Because GitHub Pages can only serve files, these JSON files *are* the database. See [`sets/README.md`](sets/README.md) for details. An example set, `circuit-review`, is included.
+
+In a set, students see:
+- one problem at a time, with Previous/Next and numbered dots (green = correct, red = tried)
+- their marks restored when they come back to a problem, even after a reload
+- at the end, a summary with the set title, date and time, an optional name box, and each problem's result: *correct on the first check*, *correct after N checks*, *not correct yet*, *not checked*, or *viewed*
+
+Each set keeps its own long-vs-round ratio and arrow setting. A new set starts from your current settings, and an opened set keeps the ones it was saved with (the Sets tab shows them, with a button to switch to yours). Pressing Check again without changing anything doesn't add to a student's check count.
+
 ## Making activities
 
 1. Go to **Build**, choose a worksheet circuit or *Blank*, and edit or draw your circuit.
@@ -84,5 +103,9 @@ js/editor.js        Build mode
 js/markup.js        Predict mode tools
 js/check.js         Check my work
 js/presets.js       built-in circuits
+js/sets.js          problem set format, validation, saved progress
+js/player.js        student slideshow and summary
+js/setbuilder.js    teacher Sets tab
+sets/               published problem sets (one JSON file each)
 tests/              node --test unit tests
 ```

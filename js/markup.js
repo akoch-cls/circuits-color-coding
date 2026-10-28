@@ -102,6 +102,7 @@ export function createMarkup(app) {
       pred.settled = false;
       app.redraw();
       app.renderFeedback();
+      if (app.onMarkupChange) app.onMarkupChange();
     }
   }
 
