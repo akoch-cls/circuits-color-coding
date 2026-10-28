@@ -17,8 +17,11 @@ import { startPlayer, fetchSet, showSetError } from './player.js';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 const STUDENT = '#7c3aed';
-const SETTLED = 1.5e-3;
-const BASE_DT = 0.03;
+const SETTLED = 4e-3; // close enough that nothing visible changes any more
+// Simulated time per animation frame at speed 1. The speed slider runs from
+// 0.25 (very slow) to 1.7, and its fastest setting matches the old slowest one.
+const BASE_DT = 0.0036;
+const STEP_TIME = 0.06; // how far one press of Step advances, at any speed
 
 const store = {
   get(k, fallback) {
@@ -734,7 +737,7 @@ function wireEvents() {
   $('#stepBtn').addEventListener('click', () => {
     if (!app.target) return;
     app.running = false;
-    for (let i = 0; i < 4; i++) app.V = step(app.graph, app.V, BASE_DT * app.speed);
+    for (let i = 0; i < 4; i++) app.V = step(app.graph, app.V, STEP_TIME / 4);
     if (!isChanging(app.V)) app.V = app.target;
     app.redraw();
   });
