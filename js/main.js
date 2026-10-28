@@ -1,6 +1,6 @@
 import { deserialize, serialize, encodeShare, decodeShare, emptyCircuit, clone, key } from './model.js';
 import {
-  buildGraph, steadyState, steadySummary, initialState, stateFromNets, step, maxDifference, analyze, raysFor,
+  buildGraph, steadyState, steadySummary, initialState, stateFromNets, step, maxDifference, analyze, raysFor, MAX_TAILS,
 } from './solver.js';
 import { LEVELS, levelOf, levelPaint, paintFor, isOffGrid } from './colors.js';
 import { draw, viewBoxFor } from './render.js';
@@ -48,6 +48,7 @@ const svg = $('#stage');
 // ---------------------------------------------------------------- physics state
 
 app.rebuild = function rebuild({ animate = false, keepPrediction = false } = {}) {
+  app.settleSource = null;
   const old = app.graph;
   const oldV = app.V;
   app.graph = buildGraph(app.circuit, app.settings.ratio);
@@ -130,7 +131,7 @@ function liveArrows(V) {
     const I = siteFlow(g, an, site);
     const r = Math.abs(I) / unit;
     if (r < 0.3 || Math.abs(I) <= app.ss.zero) continue;
-    arrows.push({ pose, n: Math.min(9, Math.max(1, Math.round(r))), dir: I >= 0 ? 1 : -1 });
+    arrows.push({ pose, n: Math.min(MAX_TAILS, Math.max(1, Math.round(r))), dir: I >= 0 ? 1 : -1 });
   }
   return arrows;
 }
@@ -426,6 +427,7 @@ function loadCircuit(circuit, selection) {
 
 function setMode(mode) {
   app.mode = mode;
+  app.settleSource = null;
   $$('.modes [data-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === mode)));
   $$('.mode-panel').forEach((p) => { p.hidden = p.dataset.panel !== mode; });
   document.body.classList.toggle('predicting', mode === 'predict');
@@ -511,7 +513,8 @@ function applySettingsUI() {
 }
 
 function saveSettings() {
-  store.set('ccsim.settings', app.settings);
+  // settings that came from a student link apply to this visit only
+  if (!app.linkSettings) store.set('ccsim.settings', app.settings);
 }
 
 function shareLink() {
@@ -519,8 +522,8 @@ function shareLink() {
   const hide = $('#linkHideAnswer').checked;
   const c = clone(app.circuit);
   c.name = $('#nameInput').value || c.name;
-  const ap = app.settings.arrowPlacement === 'junctions' ? '' : `&ap=${app.settings.arrowPlacement}`;
-  return `${location.origin}${location.pathname}#c=${encodeShare(c)}&m=${mode}${hide ? '&a=0' : ''}${ap}`;
+  const grading = `&r=${app.settings.ratio}&ap=${app.settings.arrowPlacement}`;
+  return `${location.origin}${location.pathname}#c=${encodeShare(c)}&m=${mode}${hide ? '&a=0' : ''}${grading}`;
 }
 
 function download(filename, text) {
@@ -622,7 +625,7 @@ function wireEvents() {
   $$('[data-btool]').forEach((b) => b.addEventListener('click', () => setBuildTool(b.dataset.btool)));
   $('#undoBtn').addEventListener('click', undo);
   document.addEventListener('keydown', (ev) => {
-    if (app.mode === 'build' && (ev.ctrlKey || ev.metaKey) && ev.key === 'z') { ev.preventDefault(); undo(); }
+    if (app.mode === 'build' && (ev.ctrlKey || ev.metaKey) && ev.key === 'z' && !ev.target.closest('input, select, textarea')) { ev.preventDefault(); undo(); }
   });
   $('#clearBtn').addEventListener('click', () => {
     if (!confirm('Remove everything from this circuit?')) return;
@@ -702,7 +705,11 @@ function init() {
     try { circuit = decodeShare(params.get('c')); } catch { circuit = null; }
   }
   app.locked = params.get('a') === '0';
-  if (PLACEMENTS[params.get('ap')]) app.settings.arrowPlacement = params.get('ap');
+  const ap = params.get('ap');
+  const ratio = Number(params.get('r'));
+  if (ap !== null || params.has('r')) app.linkSettings = true;
+  if (ap !== null && Object.hasOwn(PLACEMENTS, ap)) app.settings.arrowPlacement = ap;
+  if ([1.5, 2, 3, 4].includes(ratio)) app.settings.ratio = ratio;
   if (circuit) {
     app.selection = 'link';
     fillCircuitSelect();
@@ -715,8 +722,12 @@ function init() {
   applySettingsUI();
   setPredictTool('paint');
   setBuildTool('wire');
-  const mode = params.get('m');
-  setMode(['explore', 'predict', 'build'].includes(mode) ? mode : 'explore');
+  const mode = ['explore', 'predict', 'build'].includes(params.get('m')) ? params.get('m') : 'explore';
+  if (app.locked) {
+    $$('.modes [data-mode]').forEach((b) => { b.hidden = b.dataset.mode !== mode; });
+    $('#arrowPlacement').closest('label').hidden = true;
+  }
+  setMode(mode);
   updatePlayButton();
   requestAnimationFrame(frame);
 }

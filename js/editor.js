@@ -36,13 +36,17 @@ export function createEditor(app) {
     if (tool === 'wire') {
       drag = { kind: 'wire', start: gp };
     } else if (tool === 'R' || tool === 'L' || tool === 'battery') {
+      const a = [gp[0] - 1, gp[1]];
+      const b = [gp[0] + 1, gp[1]];
+      const taken = app.circuit.parts.some((p) => (same(p.a, a) && same(p.b, b)) || (same(p.a, b) && same(p.b, a)));
+      if (taken) { app.toast('There is already a part there.'); return; }
       app.edit((c) => {
         if (tool === 'battery') {
           const had = c.parts.length;
           c.parts = c.parts.filter((p) => p.type !== 'battery');
           if (c.parts.length < had) app.toast('A circuit has one battery, so the old one was moved here.');
         }
-        c.parts.push({ id: uid('p'), type: tool, a: [gp[0] - 1, gp[1]], b: [gp[0] + 1, gp[1]] });
+        c.parts.push({ id: uid('p'), type: tool, a, b });
       });
     } else if (tool === 'move' && part) {
       app.pushUndo();

@@ -2,8 +2,8 @@
 // Arrows go where the student clicks: beside a bulb, or at that spot on a wire.
 
 import { arrowAnchor } from './arrows.js';
+import { MAX_TAILS } from './solver.js';
 
-const MAX_TAILS = 9;
 const MAX_RAYS = 10;
 const NEAR = 34; // px: clicking this close to an existing arrow on the same wire edits it
 

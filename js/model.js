@@ -56,7 +56,16 @@ export function normalizeWires(circuit) {
     }
     out.push({ a: prev, b: w.b, wire: w.id });
   }
-  return out;
+  // Overlapping wires would otherwise become parallel copies of one stretch.
+  const seen = new Set();
+  return out.filter((s) => {
+    const ka = key(s.a[0], s.a[1]);
+    const kb = key(s.b[0], s.b[1]);
+    const k = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export function bounds(circuit) {

@@ -167,7 +167,7 @@ export function checkPrediction(g, ss, pred, opts = {}) {
     for (let j = i + 1; j < bulbs.length; j++) {
       const a = bulbs[i]; const c = bulbs[j];
       if (a.P <= LIT || c.P <= LIT) continue;
-      const truth = Math.abs(a.P - c.P) <= 0.03 * Math.max(a.P, c.P) ? 0 : Math.sign(a.P - c.P);
+      const truth = Math.sign(ss.rays.get(a.id) - ss.rays.get(c.id)); // same grouping as the answer key
       if (Math.sign(a.n - c.n) !== truth) {
         rankWrong++; result.badBulbs.add(a.id); result.badBulbs.add(c.id);
       }

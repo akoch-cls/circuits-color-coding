@@ -13,6 +13,7 @@
 import { normalizeWires, key } from './model.js';
 
 export const WIRE_G = 1e4;
+export const MAX_TAILS = 12; // most tails any arrow (answer key, display, student tools) can have
 const ZERO_FLOW = 0.004; // fraction of the largest flow treated as "no flow"
 
 export function buildGraph(circuit, ratio = 2) {
@@ -356,11 +357,12 @@ export function tailsUnit(mags) {
     const u = min / d;
     const ok = mags.every((m) => {
       const r = m / u;
-      return Math.abs(r - Math.round(r)) < 0.08 && Math.round(r) <= 12;
+      return Math.abs(r - Math.round(r)) < 0.08 && Math.round(r) <= MAX_TAILS;
     });
     if (ok) return { unit: u, approx: false };
   }
-  return { unit: min, approx: true };
+  // No clean split: size tails so the biggest flow still fits, and flag it.
+  return { unit: Math.max(min, Math.max(...mags) / MAX_TAILS), approx: true };
 }
 
 // Steady-state answer key: pressure levels, tails and rays.

@@ -143,3 +143,34 @@ test('short circuit and missing battery are reported', () => {
   d.parts = d.parts.filter((p) => p.type !== 'battery');
   assert.equal(buildGraph(d).error, 'no-battery');
 });
+
+test('overlapping wires merge into one stretch', () => {
+  const c = deserialize({ n: 'x', p: [['battery', 0, 2, 0, 4], ['R', 6, 2, 6, 4]], w: [[0, 2, 0, 0], [0, 0, 4, 0], [2, 0, 6, 0], [6, 0, 6, 2], [0, 4, 0, 6], [0, 6, 6, 6], [6, 6, 6, 4]] });
+  const { g, s } = solve(c);
+  assert.ok(g.degree.every((d) => d < 3), 'no fake junctions');
+  assert.ok(s.branchTails.every((t) => t === 1));
+});
+
+test('wide parallel circuits stay within the tail limit and pass their own key', async () => {
+  const { MAX_TAILS } = await import('../js/solver.js');
+  const { checkPrediction } = await import('../js/check.js');
+  const { liveSites } = await import('../js/arrows.js');
+  const cols = [...Array(5).fill(['R']), ['L'], ...Array(6).fill(['R'])];
+  const p = [['battery', 0, 1, 0, 3]];
+  const w = [[0, 1, 0, 0], [0, 3, 0, 4]];
+  cols.forEach((col, j) => { const x = 2 + 3 * j; w.push([x, 0, x, 1], [x, 3, x, 4]); p.push([col[0], x, 1, x, 3]); });
+  const xl = 2 + 3 * (cols.length - 1);
+  w.push([0, 0, xl, 0], [0, 4, xl, 4]);
+  const c = deserialize({ n: 'wide', p, w });
+  const { g, s } = solve(c);
+  assert.ok(Math.max(...s.branchTails) <= MAX_TAILS);
+  const arrows = liveSites(g, c, 'junctions').map(({ site }) => {
+    const t = site.kind === 'branch' ? { T: s.branchTails[site.b], dir: s.branchDir[site.b] } : s.partTruth.get(site.id);
+    const a = { site, n: t.T, dir: t.dir };
+    if (site.kind === 'branch') { a.seg = g.branches[site.b].main.seg; a.t = 0.5; }
+    return a;
+  }).filter((a) => a.n > 0);
+  const colors = new Map(g.branches.map((_, b) => [b, Math.round(s.branchP[b] * 8)]));
+  const r = checkPrediction(g, s, { colors, arrows, rays: new Map(s.rays) }, { circuit: c, placement: 'junctions' });
+  assert.ok(r.messages.filter((m) => m.kind === 'bad').every((m) => !/rank/.test(m.text)), 'brightness key passes');
+});

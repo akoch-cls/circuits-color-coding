@@ -28,7 +28,7 @@ By default the simulation draws an arrow **beside every bulb** and **on the wire
 - Middle of every wire
 - Bulbs and every wire
 
-The same setting tells students where they need arrows (the Predict panel says so), and it decides what Check counts as missing. Student links keep a non-default choice.
+The same setting tells students where they need arrows (the Predict panel says so), and it decides what Check counts as missing.
 
 ### What Check looks at
 - **Colors:** each wire must match its steady-state step. If the true pressure falls between two steps, either neighbor is accepted.
@@ -42,7 +42,7 @@ The same setting tells students where they need arrows (the Predict panel says s
 
 1. Go to **Build**, choose a worksheet circuit or *Blank*, and edit or draw your circuit.
 2. Give it a name. **Save to My circuits** keeps it in this browser. **Export file** saves a `.json` file you can share with colleagues, and they can load it with **Import file**.
-3. Choose whether the student link opens in *Predict* or *Explore* mode, and click **Copy student link**. The whole circuit lives in the link, so there is no account or server. Leave *Hide the Answer button and settings* ticked for assessments.
+3. Choose whether the student link opens in *Predict* or *Explore* mode, and click **Copy student link**. The whole circuit lives in the link, so there is no account or server. The link also carries your long-vs-round ratio and arrow setting, so students are graded the way you set things up (without changing their own saved settings). Leave *Hide the Answer button and settings* ticked for assessments: students then see only the mode you linked, with no Answer button, settings or arrow-placement choice.
 
 ## Teacher settings (⚙)
 
