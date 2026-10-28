@@ -49,6 +49,7 @@
   <main class="layout">
     <section class="stage-wrap">
       <div id="banner" class="banner" hidden></div>
+      <div id="arrowPicker" class="arrow-picker" role="dialog" aria-label="Choose arrow direction" hidden></div>
       <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Circuit diagram"></svg>
       <div class="statusbar">
         <span id="status" class="status"></span>
@@ -84,9 +85,10 @@
         <div class="tools" id="predictTools">
           <button data-ptool="paint" aria-pressed="true" title="Paint a wire with the chosen color">🖍 Paint</button>
           <button data-ptool="erase" title="Remove a wire's color">⌫ Erase</button>
-          <button data-ptool="tail+" title="Add a tail (adds an arrow if none)">➕ Tail</button>
-          <button data-ptool="tail-" title="Remove a tail">➖ Tail</button>
+          <button data-ptool="arrow" title="Add an arrow to a bulb or a spot on a wire, then choose its direction">➚ Add arrow</button>
           <button data-ptool="flip" title="Flip arrow direction">⇄ Flip</button>
+          <button data-ptool="tail+" title="Add a tail to an arrow">➕ Tail</button>
+          <button data-ptool="tail-" title="Remove a tail">➖ Tail</button>
           <button data-ptool="ray+" title="Add a ray to a bulb">✳ Ray +</button>
           <button data-ptool="ray-" title="Remove a ray from a bulb">✳ Ray −</button>
         </div>

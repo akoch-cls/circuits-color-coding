@@ -1,13 +1,14 @@
 // Predict mode: students paint wires, place arrows with tails and add bulb rays.
 // Arrows go where the student clicks: beside a bulb, or at that spot on a wire.
+// A new arrow always starts by asking which way it points.
 
-import { arrowAnchor } from './arrows.js';
+import { arrowAnchor, S } from './arrows.js';
 import { MAX_TAILS } from './solver.js';
 
 const MAX_RAYS = 10;
 const NEAR = 34; // px: clicking this close to an existing arrow on the same wire edits it
 
-const ARROW_TOOLS = ['tail+', 'tail-', 'flip'];
+const ARROW_TOOLS = ['arrow', 'tail+', 'tail-', 'flip'];
 
 export function createMarkup(app) {
   let painting = false;
@@ -45,68 +46,110 @@ export function createMarkup(app) {
     }
   }
 
-  function applyArrowTool(hit, ev) {
-    const tool = app.pred.tool;
+  // Which arrow site was clicked, where on it, and the arrow already there (if any).
+  function locate(hit, ev) {
     const arrows = app.pred.arrows;
     if (hit.arrow) {
-      editArrow(Number(hit.arrow.dataset.arrow), tool);
-      return true;
+      const a = arrows[Number(hit.arrow.dataset.arrow)];
+      return a ? { site: a.site, seg: a.seg, t: a.t, existing: a } : null;
     }
     if (hit.part) {
       const id = hit.part.dataset.part;
-      const i = arrows.findIndex((a) => a.site.kind === 'part' && a.site.id === id);
-      if (i >= 0) { editArrow(i, tool); return true; }
-      if (tool === 'tail+') { arrows.push({ site: { kind: 'part', id }, n: 1, dir: 1 }); return true; }
-      return false;
+      const site = { kind: 'part', id };
+      return { site, existing: arrows.find((a) => a.site.kind === 'part' && a.site.id === id) || null };
     }
     if (hit.branch) {
       const b = Number(hit.branch.dataset.branch);
-      const segIndex = Number(hit.branch.dataset.seg);
+      const seg = Number(hit.branch.dataset.seg);
       const [x, y] = app.svgPixel(ev);
       const i = nearestArrowOnBranch(b, x, y);
-      if (i >= 0) { editArrow(i, tool); return true; }
-      if (tool !== 'tail+') return false;
-      const s = app.graph.segs[segIndex];
-      const ax = s.a[0] * 60; const ay = s.a[1] * 60;
-      const dx = s.b[0] * 60 - ax; const dy = s.b[1] * 60 - ay;
+      if (i >= 0) return { site: arrows[i].site, seg: arrows[i].seg, t: arrows[i].t, existing: arrows[i] };
+      const s = app.graph.segs[seg];
+      const ax = s.a[0] * S; const ay = s.a[1] * S;
+      const dx = s.b[0] * S - ax; const dy = s.b[1] * S - ay;
       const t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1);
-      arrows.push({ site: { kind: 'branch', b }, seg: segIndex, t: Math.min(0.85, Math.max(0.15, t)), n: 1, dir: 1 });
-      return true;
+      return { site: { kind: 'branch', b }, seg, t: Math.min(0.85, Math.max(0.15, t)), existing: null };
     }
-    return false;
+    return null;
+  }
+
+  // Ask which way the arrow points, then place it (or turn the existing one).
+  function chooseDirection(spot) {
+    const arrows = app.pred.arrows;
+    const { existing } = spot;
+    app.pickDirection({
+      site: spot.site,
+      seg: spot.seg,
+      t: spot.t,
+      current: existing ? existing.dir : 0,
+      onPick: (dir) => {
+        if (existing) {
+          if (!arrows.includes(existing)) return;
+          existing.dir = dir;
+        } else {
+          const a = { site: spot.site, n: 1, dir };
+          if (spot.site.kind === 'branch') Object.assign(a, { seg: spot.seg, t: spot.t });
+          arrows.push(a);
+        }
+        changed();
+      },
+      onRemove: existing ? () => {
+        const i = arrows.indexOf(existing);
+        if (i >= 0) arrows.splice(i, 1);
+        changed();
+      } : null,
+    });
+  }
+
+  function applyArrowTool(hit, ev) {
+    const tool = app.pred.tool;
+    const spot = locate(hit, ev);
+    if (!spot) return false;
+    // Add Arrow always asks for a direction; + Tail asks when there is no arrow yet.
+    if (tool === 'arrow' || (tool === 'tail+' && !spot.existing)) {
+      chooseDirection(spot);
+      return false;
+    }
+    if (!spot.existing) return false;
+    editArrow(app.pred.arrows.indexOf(spot.existing), tool);
+    return true;
+  }
+
+  function changed() {
+    const pred = app.pred;
+    pred.check = null;
+    pred.settled = false;
+    app.redraw();
+    app.renderFeedback();
+    if (app.onMarkupChange) app.onMarkupChange();
   }
 
   function apply(ev) {
     const pred = app.pred;
     const tool = pred.tool;
     const hit = pick(ev);
-    let changed = false;
+    let didChange = false;
 
     if (ARROW_TOOLS.includes(tool)) {
-      changed = applyArrowTool(hit, ev);
+      didChange = applyArrowTool(hit, ev);
     } else if (hit.branch) {
       const b = Number(hit.branch.dataset.branch);
-      if (tool === 'paint' && pred.colors.get(b) !== pred.swatch) { pred.colors.set(b, pred.swatch); changed = true; }
-      if (tool === 'erase' && pred.colors.has(b)) { pred.colors.delete(b); changed = true; }
+      if (tool === 'paint' && pred.colors.get(b) !== pred.swatch) { pred.colors.set(b, pred.swatch); didChange = true; }
+      if (tool === 'erase' && pred.colors.has(b)) { pred.colors.delete(b); didChange = true; }
     } else if (hit.part) {
       const partId = hit.part.dataset.part;
       const part = app.circuit.parts.find((p) => p.id === partId);
       if (part && part.type !== 'battery') {
         const n = pred.rays.get(partId) || 0;
-        if (tool === 'ray+') { pred.rays.set(partId, Math.min(MAX_RAYS, n + 1)); changed = true; }
-        if (tool === 'ray-' && n > 0) { pred.rays.set(partId, n - 1); changed = true; }
+        if (tool === 'ray+') { pred.rays.set(partId, Math.min(MAX_RAYS, n + 1)); didChange = true; }
+        if (tool === 'ray-' && n > 0) { pred.rays.set(partId, n - 1); didChange = true; }
       }
     }
-    if (changed) {
-      pred.check = null;
-      pred.settled = false;
-      app.redraw();
-      app.renderFeedback();
-      if (app.onMarkupChange) app.onMarkupChange();
-    }
+    if (didChange) changed();
   }
 
   function down(ev) {
+    app.closePicker();
     if (app.pred.view !== 'mine') app.setView('mine');
     apply(ev);
     painting = app.pred.tool === 'paint' || app.pred.tool === 'erase';
