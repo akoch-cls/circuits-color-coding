@@ -17,7 +17,7 @@ Students can start a circuit from wrong pressures and watch it change into the s
 | Mode | What it's for |
 | --- | --- |
 | **Explore** | Pick a circuit and press *Start all blue / all red / all yellow / mixed up* to watch it settle. Play, Pause, Step and a speed slider let you slow down the key moments for discussion. |
-| **Predict** | Students paint wires, place arrows with tails (click a bulb, or click the spot on a wire where the arrow should go), and add rays to bulbs. **Check my work** outlines anything wrong and explains why in words. **Let it settle** starts the simulation *from the student's own colors*, so they see how their wrong picture changes into the right one. |
+| **Predict** | Students paint wires, place arrows (**Add arrow**, then click a bulb or a spot on a wire and pick which way it points; **+ Tail / − Tail** change how much flow it shows, **Flip** turns it around), and add rays to bulbs. **Check my work** outlines anything wrong and explains why in words. **Let it settle** starts the simulation *from the student's own colors*, so they see how their wrong picture changes into the right one. |
 | **Build** | Draw wires by dragging between grid dots, and click to place round bulbs, long bulbs and the battery. Use *Move*, *Rotate* and *Delete* to rearrange. The colors update live, so adding or removing a bulb visibly re-settles the circuit. |
 
 ### Where arrows go

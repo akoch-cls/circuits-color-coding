@@ -118,3 +118,21 @@ export function arrowAnchor(g, circuit, arrow) {
   const s = g.segs[arrow.seg];
   return [(s.a[0] + (s.b[0] - s.a[0]) * arrow.t) * S, (s.a[1] + (s.b[1] - s.a[1]) * arrow.t) * S];
 }
+
+const DIRECTION_NAMES = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
+
+// The two ways an arrow can point at a site whose orientation is (ux, uy) in
+// screen coordinates (y down). dir +1 points along (ux, uy). Ordered so the
+// left- (or up-) pointing choice comes first.
+export function directionChoices(ux, uy) {
+  const choice = (dir) => {
+    const x = ux * dir;
+    const y = uy * dir;
+    const angle = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    return { dir, angle, x, y, label: DIRECTION_NAMES[Math.round(angle / 45) % 8] };
+  };
+  const both = [choice(1), choice(-1)];
+  const r = (v) => Math.round(v * 1000) / 1000;
+  both.sort((p, q) => (r(p.x) - r(q.x)) || (r(p.y) - r(q.y)));
+  return both.map(({ dir, angle, label }) => ({ dir, angle, label }));
+}

@@ -20,7 +20,7 @@ When a set file changes, students' saved progress for that set starts over.
 
 ## What students see
 - One problem at a time, with your instructions, Previous/Next buttons, and numbered dots to jump around.
-- **Predict** problems: only the tools for the marks you required (wire colors, arrows, rays). *Let it settle* and the *Answer* each appear only if you allowed them, and only after they press Check, so students commit to a prediction first.
+- **Predict** problems: only the tools for the marks you required (wire colors, arrows, rays). For arrows, students press *Add arrow*, tap a bulb or a spot on a wire, and pick a direction from a small pop-up. *Let it settle* and the *Answer* each appear only if you allowed them, and only after they press Check, so students commit to a prediction first.
 - **Explore** problems: the circuit with the "watch it settle" controls and nothing to mark.
 - A summary at the end that lists each problem as *correct on the first check*, *correct after N checks*, *not correct yet* or *not checked*.
 

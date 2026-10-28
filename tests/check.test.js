@@ -106,3 +106,21 @@ test('wrong color, backwards arrow and equal-brightness ranking are caught', () 
   assert.ok(r.messages.some((m) => /wrong way/.test(m.text)));
   assert.ok(r.badBulbs.has(L.id));
 });
+
+test('direction choices: left/up first, and each matches the arrow that gets drawn', async () => {
+  const { directionChoices, studentPose, circuitCenter } = await import('../js/arrows.js');
+  assert.deepEqual(directionChoices(1, 0).map((c) => c.label), ['left', 'right']);
+  assert.deepEqual(directionChoices(0, 1).map((c) => c.label), ['up', 'down']);
+  assert.deepEqual(directionChoices(0, -1).map((c) => c.label), ['up', 'down']);
+  const s = setup('5D');
+  const center = circuitCenter(s.c);
+  for (const [b] of s.g.branches.entries()) {
+    const seg = s.g.branches[b].segs[0].seg;
+    const pose = studentPose(s.g, s.c, { site: { kind: 'branch', b }, seg, t: 0.5 }, center);
+    for (const c of directionChoices(pose.ux, pose.uy)) {
+      // the drawn arrow points along (ux, uy) * dir; its angle must match the button
+      const drawn = (Math.atan2(pose.uy * c.dir, pose.ux * c.dir) * 180 / Math.PI + 360) % 360;
+      assert.ok(Math.abs(drawn - c.angle) < 1e-6);
+    }
+  }
+});

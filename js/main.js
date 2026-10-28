@@ -8,7 +8,9 @@ import { PRESET_GROUPS } from './presets.js';
 import { createEditor } from './editor.js';
 import { createMarkup } from './markup.js';
 import { checkPrediction } from './check.js';
-import { PLACEMENTS, liveSites, siteFlow, studentPose, circuitCenter, S } from './arrows.js';
+import {
+  PLACEMENTS, liveSites, siteFlow, studentPose, circuitCenter, directionChoices, S,
+} from './arrows.js';
 import { createSetBuilder } from './setbuilder.js';
 import { startPlayer, fetchSet, showSetError } from './player.js';
 
@@ -204,6 +206,7 @@ app.redraw = function redraw() {
       bad: app.pred.check?.badArrows.has(i), hit: i,
     })).filter((a) => a.pose);
     ctx.rays = new Map([...app.pred.rays].map(([id, n]) => [id, { n, color: STUDENT }]));
+    ctx.ghost = picker?.pose;
     if (app.pred.check) {
       ctx.marks = { branches: app.pred.check.badBranches, bulbs: app.pred.check.badBulbs, nodes: app.pred.check.badNodes };
     }
@@ -292,6 +295,7 @@ function resetPrediction() {
 }
 
 app.setView = function setView(view) {
+  closePicker();
   app.pred.view = view;
   syncViewButtons();
   app.redraw();
@@ -354,6 +358,80 @@ function settleFromPrediction() {
   updatePlayButton();
   app.setView('sim');
 }
+
+// ---------------------------------------------------------------- arrow direction picker
+
+let picker = null; // { pose } while the popup is open
+
+const ARROW_SVG = '<svg viewBox="-16 -12 32 24" aria-hidden="true"><line x1="-12" y1="0" x2="10" y2="0" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><polyline points="3,-8 12,0 3,8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// Pop up the two directions an arrow can point at a bulb or a spot on a wire.
+// opts: { site, seg, t, current (dir or 0), onPick(dir), onRemove (or null) }
+app.pickDirection = function pickDirection(opts) {
+  closePicker();
+  const pose = studentPose(app.graph, app.circuit, { site: opts.site, seg: opts.seg, t: opts.t }, circuitCenter(app.circuit));
+  if (!pose) return;
+  picker = { pose };
+  const box = $('#arrowPicker');
+  box.innerHTML = '';
+  const title = document.createElement('div');
+  title.className = 'picker-title';
+  title.textContent = opts.current ? 'Change direction' : 'Which way does it flow?';
+  const close = document.createElement('button');
+  close.className = 'picker-close';
+  close.setAttribute('aria-label', 'Close');
+  close.textContent = '×';
+  close.addEventListener('click', closePicker);
+  title.appendChild(close);
+  box.appendChild(title);
+  const row = document.createElement('div');
+  row.className = 'picker-row';
+  for (const c of directionChoices(pose.ux, pose.uy)) {
+    const b = document.createElement('button');
+    b.className = 'picker-dir';
+    b.setAttribute('aria-label', `Arrow pointing ${c.label}`);
+    b.title = `Points ${c.label}`;
+    if (c.dir === opts.current) b.setAttribute('aria-pressed', 'true');
+    b.innerHTML = ARROW_SVG;
+    b.firstChild.style.transform = `rotate(${c.angle}deg)`;
+    b.addEventListener('click', () => { closePicker(); opts.onPick(c.dir); });
+    row.appendChild(b);
+  }
+  box.appendChild(row);
+  if (opts.onRemove) {
+    const rm = document.createElement('button');
+    rm.className = 'picker-remove';
+    rm.textContent = 'Remove arrow';
+    rm.addEventListener('click', () => { closePicker(); opts.onRemove(); });
+    box.appendChild(rm);
+  }
+  box.hidden = false;
+  // place it beside the spot, kept inside the circuit area
+  const wrap = $('.stage-wrap').getBoundingClientRect();
+  const pt = svg.createSVGPoint();
+  pt.x = pose.x;
+  pt.y = pose.y;
+  const scr = pt.matrixTransform(svg.getScreenCTM());
+  const w = box.offsetWidth;
+  const h = box.offsetHeight;
+  let left = scr.x - wrap.left + 22;
+  let top = scr.y - wrap.top - h / 2;
+  if (left + w > wrap.width - 8) left = scr.x - wrap.left - w - 22;
+  left = Math.max(8, Math.min(left, wrap.width - w - 8));
+  top = Math.max(8, Math.min(top, wrap.height - h - 8));
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
+  box.querySelector('.picker-dir').focus({ preventScroll: true });
+  app.redraw();
+};
+
+function closePicker() {
+  if (!picker) return;
+  picker = null;
+  $('#arrowPicker').hidden = true;
+  app.redraw();
+}
+app.closePicker = closePicker;
 
 // ---------------------------------------------------------------- build helpers
 
@@ -427,6 +505,7 @@ function circuitFor(value) {
 
 app.loadCircuit = loadCircuit;
 function loadCircuit(circuit, selection) {
+  closePicker();
   app.circuit = circuit;
   app.selection = selection;
   app.build.undo = [];
@@ -441,6 +520,7 @@ function loadCircuit(circuit, selection) {
 
 app.setMode = setMode;
 function setMode(mode) {
+  closePicker();
   app.mode = mode;
   app.settleSource = null;
   $$('.modes [data-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === mode)));
@@ -496,6 +576,7 @@ function currentSwatchName() {
 }
 
 function setPredictTool(tool) {
+  closePicker();
   app.pred.tool = tool;
   $$('[data-ptool]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ptool === tool)));
   renderSwatches();
@@ -509,10 +590,10 @@ function setBuildTool(tool) {
 }
 
 const ARROW_HINTS = {
-  junctions: 'Arrows: put one beside each lit bulb and on the wires just before and after each junction. Click a bulb or a spot on a wire with ➕ Tail.',
-  bulbs: 'Arrows: put one beside each lit bulb. Click a bulb with ➕ Tail.',
-  wires: 'Arrows: put one on every wire that has flow. Click a spot on the wire with ➕ Tail.',
-  all: 'Arrows: put one beside each lit bulb and on every wire that has flow. Click a bulb or a spot on a wire with ➕ Tail.',
+  junctions: 'Arrows: put one beside each lit bulb and on the wires just before and after each junction. Use Add arrow on a bulb or a spot on a wire, then + Tail for more flow.',
+  bulbs: 'Arrows: put one beside each lit bulb. Use Add arrow on a bulb, then + Tail for more flow.',
+  wires: 'Arrows: put one on every wire that has flow. Use Add arrow on a spot on the wire, then + Tail for more flow.',
+  all: 'Arrows: put one beside each lit bulb and on every wire that has flow. Use Add arrow on a bulb or a spot on a wire, then + Tail for more flow.',
 };
 
 // In a problem set, show only the tools and buttons this problem allows.
@@ -521,7 +602,7 @@ function syncProblemUI() {
   const req = pr ? pr.require : { colors: true, arrows: true, rays: true };
   const show = (sel, on) => $$(sel).forEach((el) => { el.hidden = !on; });
   show('[data-ptool="paint"], [data-ptool="erase"]', req.colors);
-  show('[data-ptool="tail+"], [data-ptool="tail-"], [data-ptool="flip"]', req.arrows);
+  show('[data-ptool="arrow"], [data-ptool="flip"], [data-ptool="tail+"], [data-ptool="tail-"]', req.arrows);
   show('[data-ptool="ray+"], [data-ptool="ray-"]', req.rays);
   $('#arrowHint').hidden = !req.arrows;
   // in a set, settling (which shows the steady state) unlocks after a first Check
@@ -683,6 +764,7 @@ function wireEvents() {
   // build
   $$('[data-btool]').forEach((b) => b.addEventListener('click', () => setBuildTool(b.dataset.btool)));
   $('#undoBtn').addEventListener('click', undo);
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePicker(); });
   document.addEventListener('keydown', (ev) => {
     if (app.mode === 'build' && (ev.ctrlKey || ev.metaKey) && ev.key === 'z' && !ev.target.closest('input, select, textarea')) { ev.preventDefault(); undo(); }
   });

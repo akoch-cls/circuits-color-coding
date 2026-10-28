@@ -114,6 +114,11 @@ export function draw(svg, ctx) {
     });
   }
 
+  // where a new arrow will go while the student picks its direction
+  if (ctx.ghost) {
+    out.push(`<circle cx="${f(ctx.ghost.x)}" cy="${f(ctx.ghost.y)}" r="16" fill="${STUDENT}" fill-opacity="0.12" stroke="${STUDENT}" stroke-width="2.5" stroke-dasharray="5 4" pointer-events="none"/>`);
+  }
+
   // pile-up badges
   if (ctx.badges) for (const b of ctx.badges) out.push(badge(g, b));
 
