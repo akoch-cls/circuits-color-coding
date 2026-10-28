@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Circuit Color Coding</title>
+  <meta name="description" content="A conceptual DC circuit simulator using CASTLE electric-pressure color coding, flow arrows and bulb starbursts.">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Circuit Color Coding</h1>
+    <label class="circuit-pick">
+      <span class="sr">Circuit</span>
+      <select id="circuitSelect" aria-label="Choose a circuit"></select>
+    </label>
+    <nav class="modes" role="tablist" aria-label="Mode">
+      <button role="tab" data-mode="explore" aria-selected="true">Explore</button>
+      <button role="tab" data-mode="predict">Predict</button>
+      <button role="tab" data-mode="build">Build</button>
+    </nav>
+    <button id="settingsBtn" class="icon-btn" title="Teacher settings" aria-label="Teacher settings">⚙</button>
+  </header>
+
+  <main class="layout">
+    <section class="stage-wrap">
+      <div id="banner" class="banner" hidden></div>
+      <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Circuit diagram"></svg>
+      <div class="statusbar">
+        <span id="status" class="status"></span>
+        <span id="explain" class="explain"></span>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <!-- EXPLORE -->
+      <div class="mode-panel" data-panel="explore">
+        <h2>Watch it settle</h2>
+        <p class="hint">Start the circuit from the wrong pressures and watch it change until it reaches steady state.</p>
+        <div class="btn-grid">
+          <button data-start="low">Start all blue</button>
+          <button data-start="high">Start all red</button>
+          <button data-start="mid">Start all yellow</button>
+          <button data-start="mixed">Start mixed up</button>
+        </div>
+        <button class="wide" data-start="steady">Jump to steady state</button>
+      </div>
+
+      <!-- PREDICT -->
+      <div class="mode-panel" data-panel="predict" hidden>
+        <h2>Your prediction</h2>
+        <p class="hint">Color each wire, add arrows with tails, and add rays to the bulbs. Then check your work or let the circuit settle from your colors.</p>
+        <div class="view-toggle" role="radiogroup" aria-label="View">
+          <button data-view="mine" aria-pressed="true">My prediction</button>
+          <button data-view="sim" aria-pressed="false">Simulation</button>
+          <button data-view="answer" aria-pressed="false" id="answerBtn">Answer</button>
+        </div>
+        <h3>Tool</h3>
+        <div class="tools" id="predictTools">
+          <button data-ptool="paint" aria-pressed="true" title="Paint a wire with the chosen color">🖍 Paint</button>
+          <button data-ptool="erase" title="Remove a wire's color">⌫ Erase</button>
+          <button data-ptool="tail+" title="Add a tail (adds an arrow if none)">➕ Tail</button>
+          <button data-ptool="tail-" title="Remove a tail">➖ Tail</button>
+          <button data-ptool="flip" title="Flip arrow direction">⇄ Flip</button>
+          <button data-ptool="ray+" title="Add a ray to a bulb">✳ Ray +</button>
+          <button data-ptool="ray-" title="Remove a ray from a bulb">✳ Ray −</button>
+        </div>
+        <div class="btn-row">
+          <button id="checkBtn" class="primary">Check my work</button>
+          <button id="settleBtn" class="primary">Let it settle</button>
+        </div>
+        <button id="clearMarksBtn" class="wide subtle">Clear my marks</button>
+        <ul id="feedback" class="feedback" aria-live="polite"></ul>
+      </div>
+
+      <!-- BUILD -->
+      <div class="mode-panel" data-panel="build" hidden>
+        <h2>Build a circuit</h2>
+        <p class="hint">Drag between grid dots to draw wires. Click to place parts. The colors update live.</p>
+        <div class="tools" id="buildTools">
+          <button data-btool="wire" aria-pressed="true">〰 Wire</button>
+          <button data-btool="R">◯ Round bulb</button>
+          <button data-btool="L">⬭ Long bulb</button>
+          <button data-btool="battery">🔋 Battery</button>
+          <button data-btool="move">✥ Move</button>
+          <button data-btool="rotate">⟳ Rotate</button>
+          <button data-btool="delete">✕ Delete</button>
+        </div>
+        <div class="btn-row">
+          <button id="undoBtn">Undo</button>
+          <button id="clearBtn">Clear all</button>
+        </div>
+        <h3>Save &amp; share</h3>
+        <label class="field">Name <input id="nameInput" type="text" maxlength="60"></label>
+        <div class="btn-row">
+          <button id="saveBtn">Save to My circuits</button>
+          <button id="deleteSavedBtn">Remove saved</button>
+        </div>
+        <div class="btn-row">
+          <button id="exportBtn">Export file</button>
+          <button id="importBtn">Import file</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden>
+        </div>
+        <label class="field">Student link opens in
+          <select id="linkMode">
+            <option value="predict">Predict mode</option>
+            <option value="explore">Explore mode</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="linkHideAnswer" checked> Hide the Answer button and settings</label>
+        <button id="copyLinkBtn" class="wide primary">Copy student link</button>
+      </div>
+
+      <!-- shared -->
+      <div class="layers" id="layers">
+        <h3>Show</h3>
+        <label class="check"><input type="checkbox" data-layer="colors" checked> Pressure colors</label>
+        <label class="check"><input type="checkbox" data-layer="arrows" checked> Flow arrows</label>
+        <label class="check"><input type="checkbox" data-layer="rays" checked> Bulb rays</label>
+        <label class="check"><input type="checkbox" data-layer="badges" checked> Pile-up markers</label>
+      </div>
+      <div class="playback" id="playback">
+        <button id="playBtn">⏸ Pause</button>
+        <button id="stepBtn">Step</button>
+        <label class="speed">Speed <input id="speed" type="range" min="0.2" max="3" step="0.1" value="1"></label>
+      </div>
+      <div class="legend">
+        <h3>Electric pressure <span class="legend-ends">high → low</span></h3>
+        <div id="swatches" class="swatches"></div>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Teacher settings</h2>
+      <label class="field">How much harder it is for charge to get through a long bulb than a round bulb
+        <select id="ratioSelect">
+          <option value="1.5">1.5×</option>
+          <option value="2">2× (default)</option>
+          <option value="3">3×</option>
+          <option value="4">4×</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="snapSetting"> Snap colors to the 9 steps (off = smooth blend)</label>
+      <label class="check"><input type="checkbox" id="approxSetting"> Mark wires whose pressure falls between two steps (≈)</label>
+      <label class="check"><input type="checkbox" id="answerSetting"> Allow the Answer button in Predict mode</label>
+      <p id="approxNote" class="hint"></p>
+      <div class="btn-row"><button value="close" class="primary">Done</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
