@@ -55,6 +55,7 @@
           <button data-view="sim" aria-pressed="false">Simulation</button>
           <button data-view="answer" aria-pressed="false" id="answerBtn">Answer</button>
         </div>
+        <p class="hint" id="arrowHint"></p>
         <h3>Tool</h3>
         <div class="tools" id="predictTools">
           <button data-ptool="paint" aria-pressed="true" title="Paint a wire with the chosen color">🖍 Paint</button>
@@ -116,6 +117,9 @@
         <h3>Show</h3>
         <label class="check"><input type="checkbox" data-layer="colors" checked> Pressure colors</label>
         <label class="check"><input type="checkbox" data-layer="arrows" checked> Flow arrows</label>
+        <label class="field indent">Arrows go at
+          <select id="arrowPlacement"></select>
+        </label>
         <label class="check"><input type="checkbox" data-layer="rays" checked> Bulb rays</label>
         <label class="check"><input type="checkbox" data-layer="badges" checked> Pile-up markers</label>
       </div>

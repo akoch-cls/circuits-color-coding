@@ -51,10 +51,16 @@ export function buildGraph(circuit, ratio = 2) {
 
   const n = g.nodes.length;
   g.isTerminal = new Uint8Array(n);
+  g.degree = new Int32Array(n); // elements meeting at each node; 3 or more is a junction
   circuit.parts.forEach((p) => {
-    g.isTerminal[g.nodeIndex.get(key(...p.a))] = 1;
-    g.isTerminal[g.nodeIndex.get(key(...p.b))] = 1;
+    const a = g.nodeIndex.get(key(...p.a));
+    const b = g.nodeIndex.get(key(...p.b));
+    g.isTerminal[a] = 1;
+    g.isTerminal[b] = 1;
+    g.degree[a]++;
+    g.degree[b]++;
   });
+  g.segs.forEach((sg) => { g.degree[sg.na]++; g.degree[sg.nb]++; });
 
   // Nets: groups of nodes joined by wire alone. A net is one "wire" to a student.
   const wireUF = unionFind(n);
@@ -367,10 +373,17 @@ export function steadySummary(g, V) {
   const branchTails = an.branchI.map((i) => (Math.abs(i) > zero ? Math.max(1, Math.round(Math.abs(i) / unit)) : 0));
   const branchDir = an.branchI.map((i) => (i >= 0 ? 1 : -1));
   const bulbTails = new Map(an.bulbs.map((b) => [b.part.id, Math.abs(b.I) > zero ? Math.max(1, Math.round(Math.abs(b.I) / unit)) : 0]));
+  const tailsOf = (i) => (Math.abs(i) > zero ? Math.max(1, Math.round(Math.abs(i) / unit)) : 0);
+  // arrows on parts, with dir relative to part.a -> part.b
+  const partTruth = new Map(an.bulbs.map((b) => [b.part.id, { T: tailsOf(b.I), dir: b.I >= 0 ? 1 : -1 }]));
+  if (g.battery) {
+    const through = -an.I[g.batteryEdge]; // inside the battery flow runs from - (b) to + (a)
+    partTruth.set(g.battery.part.id, { T: tailsOf(through), dir: through >= 0 ? 1 : -1 });
+  }
   const rays = raysFor(an.bulbs);
   const power = new Map(an.bulbs.map((b) => [b.part.id, b.P]));
   const branchP = g.branches.map((_, b) => branchPressure(g, V, b));
-  return { ...an, unit, approx, zero, branchTails, branchDir, bulbTails, rays, power, branchP };
+  return { ...an, unit, approx, zero, branchTails, branchDir, bulbTails, partTruth, rays, power, branchP };
 }
 
 export const LIT = 0.004; // power (relative to one round bulb alone) below which a bulb looks off

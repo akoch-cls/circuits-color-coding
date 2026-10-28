@@ -98,3 +98,4 @@ dialog button { border: 1px solid var(--ink); background: var(--ink); color: #ff
   .circuit-pick { flex: 1 1 100%; order: 3; }
 }
 [hidden] { display: none !important; }
+.field.indent { margin-left: 26px; font-size: 0.85rem; }

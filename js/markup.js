@@ -1,37 +1,95 @@
-// Predict mode: students paint wires, add arrows with tails and add bulb rays.
+// Predict mode: students paint wires, place arrows with tails and add bulb rays.
+// Arrows go where the student clicks: beside a bulb, or at that spot on a wire.
+
+import { arrowAnchor } from './arrows.js';
 
 const MAX_TAILS = 9;
 const MAX_RAYS = 10;
+const NEAR = 34; // px: clicking this close to an existing arrow on the same wire edits it
+
+const ARROW_TOOLS = ['tail+', 'tail-', 'flip'];
 
 export function createMarkup(app) {
   let painting = false;
 
-  function apply(el) {
-    if (!el) return;
+  // The element under the pointer that the current tool cares about. Arrows sit
+  // on top of wires, so look through the whole stack.
+  function pick(ev) {
+    const tool = app.pred.tool;
+    const stack = document.elementsFromPoint(ev.clientX, ev.clientY);
+    const find = (attr) => stack.find((el) => el.dataset && el.dataset[attr] !== undefined);
+    if (tool === 'paint' || tool === 'erase') return { branch: find('branch') };
+    if (tool === 'ray+' || tool === 'ray-') return { part: find('part') };
+    return { arrow: find('arrow'), part: find('part'), branch: find('branch') };
+  }
+
+  function nearestArrowOnBranch(b, x, y) {
+    let best = -1; let bestD = NEAR;
+    app.pred.arrows.forEach((a, i) => {
+      if (a.site.kind !== 'branch' || a.site.b !== b) return;
+      const [ax, ay] = arrowAnchor(app.graph, app.circuit, a);
+      const d = Math.hypot(ax - x, ay - y);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+
+  function editArrow(i, tool) {
+    const arrows = app.pred.arrows;
+    const a = arrows[i];
+    if (tool === 'tail+') a.n = Math.min(MAX_TAILS, a.n + 1);
+    if (tool === 'flip') a.dir = -a.dir;
+    if (tool === 'tail-') {
+      a.n -= 1;
+      if (a.n <= 0) arrows.splice(i, 1);
+    }
+  }
+
+  function applyArrowTool(hit, ev) {
+    const tool = app.pred.tool;
+    const arrows = app.pred.arrows;
+    if (hit.arrow) {
+      editArrow(Number(hit.arrow.dataset.arrow), tool);
+      return true;
+    }
+    if (hit.part) {
+      const id = hit.part.dataset.part;
+      const i = arrows.findIndex((a) => a.site.kind === 'part' && a.site.id === id);
+      if (i >= 0) { editArrow(i, tool); return true; }
+      if (tool === 'tail+') { arrows.push({ site: { kind: 'part', id }, n: 1, dir: 1 }); return true; }
+      return false;
+    }
+    if (hit.branch) {
+      const b = Number(hit.branch.dataset.branch);
+      const segIndex = Number(hit.branch.dataset.seg);
+      const [x, y] = app.svgPixel(ev);
+      const i = nearestArrowOnBranch(b, x, y);
+      if (i >= 0) { editArrow(i, tool); return true; }
+      if (tool !== 'tail+') return false;
+      const s = app.graph.segs[segIndex];
+      const ax = s.a[0] * 60; const ay = s.a[1] * 60;
+      const dx = s.b[0] * 60 - ax; const dy = s.b[1] * 60 - ay;
+      const t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1);
+      arrows.push({ site: { kind: 'branch', b }, seg: segIndex, t: Math.min(0.85, Math.max(0.15, t)), n: 1, dir: 1 });
+      return true;
+    }
+    return false;
+  }
+
+  function apply(ev) {
     const pred = app.pred;
     const tool = pred.tool;
-    const branch = el.dataset.branch !== undefined ? Number(el.dataset.branch) : null;
-    const partId = el.dataset.part;
+    const hit = pick(ev);
     let changed = false;
 
-    if (branch !== null) {
-      if (tool === 'paint' && pred.colors.get(branch) !== pred.swatch) {
-        pred.colors.set(branch, pred.swatch); changed = true;
-      } else if (tool === 'erase' && pred.colors.has(branch)) {
-        pred.colors.delete(branch); changed = true;
-      } else if (tool === 'tail+') {
-        const t = pred.tails.get(branch) || { n: 0, dir: 1 };
-        pred.tails.set(branch, { ...t, n: Math.min(MAX_TAILS, t.n + 1) }); changed = true;
-      } else if (tool === 'tail-' && pred.tails.has(branch)) {
-        const t = pred.tails.get(branch);
-        if (t.n <= 1) pred.tails.delete(branch); else pred.tails.set(branch, { ...t, n: t.n - 1 });
-        changed = true;
-      } else if (tool === 'flip' && pred.tails.has(branch)) {
-        const t = pred.tails.get(branch);
-        pred.tails.set(branch, { ...t, dir: -t.dir }); changed = true;
-      }
-    }
-    if (partId) {
+    if (ARROW_TOOLS.includes(tool)) {
+      changed = applyArrowTool(hit, ev);
+    } else if (hit.branch) {
+      const b = Number(hit.branch.dataset.branch);
+      if (tool === 'paint' && pred.colors.get(b) !== pred.swatch) { pred.colors.set(b, pred.swatch); changed = true; }
+      if (tool === 'erase' && pred.colors.has(b)) { pred.colors.delete(b); changed = true; }
+    } else if (hit.part) {
+      const partId = hit.part.dataset.part;
       const part = app.circuit.parts.find((p) => p.id === partId);
       if (part && part.type !== 'battery') {
         const n = pred.rays.get(partId) || 0;
@@ -47,15 +105,14 @@ export function createMarkup(app) {
     }
   }
 
-  function down(ev, target) {
+  function down(ev) {
     if (app.pred.view !== 'mine') app.setView('mine');
-    apply(target);
+    apply(ev);
     painting = app.pred.tool === 'paint' || app.pred.tool === 'erase';
   }
 
   function move(ev) {
-    if (!painting) return;
-    apply(document.elementFromPoint(ev.clientX, ev.clientY));
+    if (painting) apply(ev);
   }
 
   function up() {

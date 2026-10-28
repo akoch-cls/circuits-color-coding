@@ -17,14 +17,25 @@ Students can start a circuit from wrong pressures and watch it change into the s
 | Mode | What it's for |
 | --- | --- |
 | **Explore** | Pick a circuit and press *Start all blue / all red / all yellow / mixed up* to watch it settle. Play, Pause, Step and a speed slider let you slow down the key moments for discussion. |
-| **Predict** | Students paint wires, add arrows with tails, and add rays to bulbs. **Check my work** outlines anything wrong and explains why in words. **Let it settle** starts the simulation *from the student's own colors*, so they see how their wrong picture changes into the right one. |
+| **Predict** | Students paint wires, place arrows with tails (click a bulb, or click the spot on a wire where the arrow should go), and add rays to bulbs. **Check my work** outlines anything wrong and explains why in words. **Let it settle** starts the simulation *from the student's own colors*, so they see how their wrong picture changes into the right one. |
 | **Build** | Draw wires by dragging between grid dots, and click to place round bulbs, long bulbs and the battery. Use *Move*, *Rotate* and *Delete* to rearrange. The colors update live, so adding or removing a bulb visibly re-settles the circuit. |
+
+### Where arrows go
+By default the simulation draws an arrow **beside every bulb** and **on the wires just before and after every junction**. You can change this under *Show → Arrows go at*:
+
+- Bulbs and before/after junctions (default)
+- Bulbs only
+- Middle of every wire
+- Bulbs and every wire
+
+The same setting tells students where they need arrows (the Predict panel says so), and it decides what Check counts as missing. Student links keep a non-default choice.
 
 ### What Check looks at
 - **Colors:** each wire must match its steady-state step. If the true pressure falls between two steps, either neighbor is accepted.
-- **Arrows:** directions must be right, and tails must be *in proportion*. A student may draw every arrow with twice as many tails, as long as they do it consistently.
-- **The junction rule:** at every junction, tails in must equal tails out.
-- **"Bulbs don't use up flow":** tails into a bulb (or the battery) must equal tails out.
+- **Arrows:** every arrow is graded where the student put it. Directions must be right, and tails must be *in proportion*: a student may draw every arrow with twice as many tails, as long as they do it consistently. Places the class convention requires (bulbs and/or junction wires) must have an arrow.
+- **Along a wire:** two arrows on the same stretch of wire must match.
+- **The junction rule:** at every junction, tails in must equal tails out (circled if not).
+- **"Bulbs don't use up flow":** the arrow on a bulb must match the arrows on the wires either side of it.
 - **Brightness:** rays must *rank* the bulbs correctly (brighter means more rays, equal means the same number, unlit means none).
 
 ## Making activities
@@ -68,6 +79,7 @@ js/model.js         circuit data, save/load, share links
 js/solver.js        pressures, flows, settling over time, answer key
 js/colors.js        pressure → 9-step colors and stripes
 js/render.js        SVG drawing (highlighter wires, arrows, starbursts, markers)
+js/arrows.js        where arrows go (bulbs, junctions, wires) and their flows
 js/editor.js        Build mode
 js/markup.js        Predict mode tools
 js/check.js         Check my work

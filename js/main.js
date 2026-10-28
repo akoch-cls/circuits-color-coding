@@ -8,6 +8,7 @@ import { PRESET_GROUPS } from './presets.js';
 import { createEditor } from './editor.js';
 import { createMarkup } from './markup.js';
 import { checkPrediction } from './check.js';
+import { PLACEMENTS, liveSites, siteFlow, studentPose, circuitCenter, S } from './arrows.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -34,9 +35,9 @@ const app = {
   speed: 1,
   mode: 'explore',
   locked: false, // opened from a student link that hides answers/settings
-  settings: { ratio: 2, snap: true, approx: false, allowAnswer: true, ...store.get('ccsim.settings', {}) },
+  settings: { ratio: 2, snap: true, approx: false, allowAnswer: true, arrowPlacement: 'junctions', ...store.get('ccsim.settings', {}) },
   layers: { colors: true, arrows: true, rays: true, badges: true },
-  pred: { colors: new Map(), tails: new Map(), rays: new Map(), tool: 'paint', swatch: 8, check: null, view: 'mine' },
+  pred: { colors: new Map(), arrows: [], rays: new Map(), tool: 'paint', swatch: 8, check: null, view: 'mine' },
   build: { tool: 'wire', hover: null, preview: null, selected: null, undo: [] },
   settleSource: null, // 'prediction' when settling from the student's colors
   selection: null, // value of the circuit <select>
@@ -122,14 +123,15 @@ function segPressure(V, s) {
 
 function liveArrows(V) {
   const g = app.graph;
-  const { branchI } = analyze(g, V);
+  const an = analyze(g, V);
   const unit = app.ss.unit;
   const arrows = [];
-  branchI.forEach((I, b) => {
+  for (const { site, pose } of liveSites(g, app.circuit, app.settings.arrowPlacement)) {
+    const I = siteFlow(g, an, site);
     const r = Math.abs(I) / unit;
-    if (r < 0.3 || Math.abs(I) <= app.ss.zero) return;
-    arrows.push({ branch: b, n: Math.min(9, Math.max(1, Math.round(r))), dir: I >= 0 ? 1 : -1 });
-  });
+    if (r < 0.3 || Math.abs(I) <= app.ss.zero) continue;
+    arrows.push({ pose, n: Math.min(9, Math.max(1, Math.round(r))), dir: I >= 0 ? 1 : -1 });
+  }
   return arrows;
 }
 
@@ -189,9 +191,11 @@ app.redraw = function redraw() {
 
   if (view === 'mine') {
     Object.assign(ctx, predictionPaints());
-    ctx.arrows = [...app.pred.tails].filter(([, t]) => t.n > 0).map(([branch, t]) => ({
-      branch, n: t.n, dir: t.dir, color: STUDENT, bad: app.pred.check?.badArrows.has(branch),
-    }));
+    const center = circuitCenter(app.circuit);
+    ctx.arrows = app.pred.arrows.map((a, i) => ({
+      pose: studentPose(g, app.circuit, a, center), n: a.n, dir: a.dir, color: STUDENT,
+      bad: app.pred.check?.badArrows.has(i), hit: i,
+    })).filter((a) => a.pose);
     ctx.rays = new Map([...app.pred.rays].map(([id, n]) => [id, { n, color: STUDENT }]));
     if (app.pred.check) {
       ctx.marks = { branches: app.pred.check.badBranches, bulbs: app.pred.check.badBulbs, nodes: app.pred.check.badNodes };
@@ -271,7 +275,7 @@ function updateStatus() {
 
 function resetPrediction() {
   app.pred.colors = new Map();
-  app.pred.tails = new Map();
+  app.pred.arrows = [];
   app.pred.rays = new Map();
   app.pred.check = null;
   app.pred.settled = false;
@@ -300,7 +304,7 @@ function runCheck() {
     renderFeedback([{ kind: 'info', text: 'This circuit has no steady flow to check against.' }]);
     return;
   }
-  app.pred.check = checkPrediction(app.graph, app.ss, app.pred);
+  app.pred.check = checkPrediction(app.graph, app.ss, app.pred, { circuit: app.circuit, placement: app.settings.arrowPlacement });
   renderFeedback();
   app.redraw();
 }
@@ -485,7 +489,16 @@ function setBuildTool(tool) {
   app.redraw();
 }
 
+const ARROW_HINTS = {
+  junctions: 'Arrows: put one beside each lit bulb and on the wires just before and after each junction. Click a bulb or a spot on a wire with ➕ Tail.',
+  bulbs: 'Arrows: put one beside each lit bulb. Click a bulb with ➕ Tail.',
+  wires: 'Arrows: put one on every wire that has flow. Click a spot on the wire with ➕ Tail.',
+  all: 'Arrows: put one beside each lit bulb and on every wire that has flow. Click a bulb or a spot on a wire with ➕ Tail.',
+};
+
 function applySettingsUI() {
+  $('#arrowHint').textContent = ARROW_HINTS[app.settings.arrowPlacement];
+  $('#arrowPlacement').value = app.settings.arrowPlacement;
   $('#ratioSelect').value = String(app.settings.ratio);
   $('#snapSetting').checked = app.settings.snap;
   $('#approxSetting').checked = app.settings.approx;
@@ -506,7 +519,8 @@ function shareLink() {
   const hide = $('#linkHideAnswer').checked;
   const c = clone(app.circuit);
   c.name = $('#nameInput').value || c.name;
-  return `${location.origin}${location.pathname}#c=${encodeShare(c)}&m=${mode}${hide ? '&a=0' : ''}`;
+  const ap = app.settings.arrowPlacement === 'junctions' ? '' : `&ap=${app.settings.arrowPlacement}`;
+  return `${location.origin}${location.pathname}#c=${encodeShare(c)}&m=${mode}${hide ? '&a=0' : ''}${ap}`;
 }
 
 function download(filename, text) {
@@ -517,12 +531,20 @@ function download(filename, text) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+app.svgPixel = function svgPixel(ev) {
+  const pt = svg.createSVGPoint();
+  pt.x = ev.clientX;
+  pt.y = ev.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [p.x, p.y];
+};
+
 function svgPoint(ev) {
   const pt = svg.createSVGPoint();
   pt.x = ev.clientX;
   pt.y = ev.clientY;
   const p = pt.matrixTransform(svg.getScreenCTM().inverse());
-  return [Math.round(p.x / 60), Math.round(p.y / 60)];
+  return [Math.round(p.x / S), Math.round(p.y / S)];
 }
 
 function wireEvents() {
@@ -533,7 +555,7 @@ function wireEvents() {
     const target = ev.target.closest('[data-part], [data-branch]');
     svg.setPointerCapture(ev.pointerId);
     if (app.mode === 'build') editor.down(ev, svgPoint(ev), target);
-    else if (app.mode === 'predict') markup.down(ev, target);
+    else if (app.mode === 'predict') markup.down(ev);
   });
   svg.addEventListener('pointermove', (ev) => {
     if (app.mode === 'build') editor.move(ev, svgPoint(ev));
@@ -568,6 +590,16 @@ function wireEvents() {
     app.redraw();
   });
   $('#speed').addEventListener('input', (ev) => { app.speed = Number(ev.target.value); });
+  const placement = $('#arrowPlacement');
+  placement.innerHTML = Object.entries(PLACEMENTS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
+  placement.value = app.settings.arrowPlacement;
+  placement.addEventListener('change', () => {
+    app.settings.arrowPlacement = placement.value;
+    saveSettings();
+    applySettingsUI();
+    if (app.pred.check) runCheck();
+    app.redraw();
+  });
   $$('[data-layer]').forEach((c) => c.addEventListener('change', () => {
     app.layers[c.dataset.layer] = c.checked;
     app.redraw();
@@ -670,6 +702,7 @@ function init() {
     try { circuit = decodeShare(params.get('c')); } catch { circuit = null; }
   }
   app.locked = params.get('a') === '0';
+  if (PLACEMENTS[params.get('ap')]) app.settings.arrowPlacement = params.get('ap');
   if (circuit) {
     app.selection = 'link';
     fillCircuitSelect();

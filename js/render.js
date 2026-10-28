@@ -4,8 +4,9 @@
 
 import { stripeDefs } from './colors.js';
 import { bounds } from './model.js';
+import { S } from './arrows.js';
 
-export const S = 60; // pixels per grid unit
+export { S };
 const BULB_R = 22;
 const INK = '#1f2430';
 const STUDENT = '#7c3aed';
@@ -28,7 +29,7 @@ export function viewBoxFor(circuit, building) {
 //   circuit, graph, viewBox, building,
 //   segPaint(segIndex) -> paint | null       highlighter for wire segments
 //   nodePaint(nodeIndex) -> paint | null     highlighter for part leads
-//   arrows: [{ branch, n, dir, color, offset, bad }]
+//   arrows: [{ pose: {x, y, ux, uy}, n, dir, color, bad, hit }]   hit = index for clicking
 //   rays: Map(partId -> { n, color })
 //   badges: [{ node, sign, strength }]
 //   marks: { branches:Set, bulbs:Set, nodes:Set }
@@ -95,8 +96,7 @@ export function draw(svg, ctx) {
   }
 
   // arrows
-  const center = centerOf(ctx.circuit);
-  if (ctx.arrows) for (const a of ctx.arrows) out.push(arrowFor(g, a, center));
+  if (ctx.arrows) for (const a of ctx.arrows) out.push(arrowAt(a));
 
   // approx markers
   if (ctx.approx) {
@@ -124,6 +124,11 @@ export function draw(svg, ctx) {
   for (const p of ctx.circuit.parts) {
     const [cx, cy] = centerPx(p);
     out.push(`<circle cx="${cx}" cy="${cy}" r="${BULB_R + 8}" fill="transparent" data-part="${p.id}" class="hit"/>`);
+  }
+  if (ctx.arrows) {
+    ctx.arrows.forEach((a) => {
+      if (a.hit !== undefined) out.push(`<circle cx="${f(a.pose.x)}" cy="${f(a.pose.y)}" r="17" fill="transparent" data-arrow="${a.hit}" class="hit"/>`);
+    });
   }
 
   // editor overlays
@@ -213,32 +218,15 @@ function starburst(p, n, color) {
   return `<g pointer-events="none">${s}</g>`;
 }
 
-function centerOf(circuit) {
-  const b = bounds(circuit);
-  return [(b.minX + b.maxX) * S / 2, (b.minY + b.maxY) * S / 2];
-}
-
 function midOfBranch(g, b) {
   const s = g.segs[g.branches[b].main.seg];
   return { x: (s.a[0] + s.b[0]) * S / 2, y: (s.a[1] + s.b[1]) * S / 2 };
 }
 
-function arrowFor(g, a, center) {
-  const br = g.branches[a.branch];
-  const { seg, fwd } = br.main;
-  const s = g.segs[seg];
-  let [x1, y1] = px(s.a);
-  let [x2, y2] = px(s.b);
-  if (!fwd) [x1, y1, x2, y2] = [x2, y2, x1, y1];
-  if (a.dir < 0) [x1, y1, x2, y2] = [x2, y2, x1, y1];
-  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
-  const ux = (x2 - x1) / len; const uy = (y2 - y1) / len;
-  let nx = -uy; let ny = ux;
-  const mx = (x1 + x2) / 2; const my = (y1 + y2) / 2;
-  if ((mx - center[0]) * nx + (my - center[1]) * ny < 0) { nx = -nx; ny = -ny; }
-  const off = a.offset || 20;
-  const ox = mx + nx * off; const oy = my + ny * off;
-  return `<g transform="translate(${f(ox)} ${f(oy)}) rotate(${f(Math.atan2(uy, ux) * 180 / Math.PI)})" pointer-events="none">${arrowGlyph(a.n, a.color || INK, a.bad)}</g>`;
+function arrowAt(a) {
+  const { x, y, ux, uy } = a.pose;
+  const angle = Math.atan2(uy, ux) * 180 / Math.PI + (a.dir < 0 ? 180 : 0);
+  return `<g transform="translate(${f(x)} ${f(y)}) rotate(${f(angle)})" pointer-events="none">${arrowGlyph(a.n, a.color || INK, a.bad)}</g>`;
 }
 
 // An arrow pointing along +x with `n` parallel tails feeding one head.
